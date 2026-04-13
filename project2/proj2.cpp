@@ -160,7 +160,8 @@ int CountNumberOfCellsWithinThreshold(const float *X, const float *Y,
 float AreaForCell(const float *X, const float *Y, const int *dims, int cellId)
 {
     // IMPLEMENT ME!
-    return 0;
+    
+    return dims[0]*dims[1];
 }
 
 // ****************************************************************************
