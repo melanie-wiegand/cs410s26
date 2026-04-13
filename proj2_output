@@ -1,0 +1,20 @@
+The number of cells between -1 and 1 is 1200
+The number of cells between -1 and 0 is 600
+The number of cells between 0 and 1 is 560
+The number of cells between -0.75 and -0.25 is 240
+The number of cells between 0.25 and 0.75 is 240
+The area for cell 0 is 0.000937325
+The area for cell 50 is 0.00119702
+The area for cell 678 is 0.0010436
+The area for cell 1000 is 0.00119668
+The area for cell 1200 is 0
+Evaluated field at (1.01119,0.122062) as 0
+Evaluated field at (0.862376,1.33829) as 0
+Evaluated field at (0.155026,0.126123) as -0.717607
+Evaluated field at (0.69736,0.0653565) as 0.419015
+Evaluated field at (0.2,0.274117) as -0.910376
+Evaluated field at (0.893699,1.04111) as 0
+Evaluated field at (0.608791,-0.0533753) as 0
+Evaluated field at (1.00543,0.158024) as 0
+Evaluated field at (0.384158,-0.0768977) as 0
+Evaluated field at (0.666757,0.60259) as 0.492619
