@@ -135,6 +135,39 @@ int CountNumberOfCellsWithinThreshold(const float *X, const float *Y,
 {
     int count = 0;
     // IMPLEMENT ME!
+
+    int num_cells = (dims[0]  - 1)*(dims[1] - 1);
+
+    for (int i = 0; i < num_cells; i++)
+    {
+        // logical cell index
+        int lci[2] = {i % (dims[0] - 1), i / (dims[0] - 1)};
+
+        // BL, BR, TL, TR
+        int bl = lci[1]*dims[0] + lci[0]; // bottom left 
+        int br = bl + 1; // bottom right
+        int tl = bl + dims[0]; // top left
+        int tr = tl + 1; // top right
+
+        int corners[4] = {bl, br, tl, tr};
+
+        bool within = true;
+
+        for (int j = 0; j < 4; j++)
+        {
+            if (F[corners[j]] < lower || F[corners[j]] > upper)
+            {
+                within = false;
+                break;
+            }
+        }
+
+        if (within)
+        {
+            count++;
+        }
+    }
+
     return count;
 }
 
@@ -164,28 +197,18 @@ float AreaForCell(const float *X, const float *Y, const int *dims, int cellId)
     // printf("dims = (%d, %d)\n", dims[0], dims[1]);
     // return dims[0]*dims[1];
 
-    if (cellId >= 0 && cellId < dims[0]*dims[1])
+    if (cellId >= 0 && cellId < (dims[0] - 1)*(dims[1] - 1)) // cell dims are 1 less than point dims
     {
-        int x_ind = cellId % dims[0]; // modulus gives remainder when dividing by num of columns = x index
-        int y_ind = cellId / dims[0]; // int division gives column index = y index
+        int x_ind = cellId % (dims[0] - 1); // modulus gives remainder when dividing by num of columns = x index
+        int y_ind = cellId / (dims[0] - 1); // int division gives column index = y index
 
-        printf("Logical index for cellId %d is (%d, %d)\n", cellId, x_ind, y_ind);
+        // printf("Logical (cell) index for cellId %d is (%d, %d)\n", cellId, x_ind, y_ind);
 
-        float tot_x = 0;
-        for (int i = 0; i < x_ind + 1; i++)
-        {
-            // printf("X[%d] = %f, X[%d] = [%f]\n", i, X[i], i+1, X[i+1]);
-            tot_x += X[i+1] - X[i];
-        }
-
-        float tot_y = 0;
-        for (int i = 0; i < y_ind + 1; i++)
-        {
-            tot_y += Y[i+1] - Y[i];
-        }
+        float width = X[x_ind + 1] - X[x_ind];
+        float height = Y[y_ind + 1] - Y[y_ind];
         
-        printf("tot_x = %f, tot_y = %f\n", tot_x, tot_y);
-        return tot_x*tot_y;
+        // printf("width = %f,  height = %f\n", width, height);
+        return width*height;
     }
     else
     {
