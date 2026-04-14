@@ -160,8 +160,37 @@ int CountNumberOfCellsWithinThreshold(const float *X, const float *Y,
 float AreaForCell(const float *X, const float *Y, const int *dims, int cellId)
 {
     // IMPLEMENT ME!
-    
-    return dims[0]*dims[1];
+
+    // printf("dims = (%d, %d)\n", dims[0], dims[1]);
+    // return dims[0]*dims[1];
+
+    if (cellId >= 0 && cellId < dims[0]*dims[1])
+    {
+        int x_ind = cellId % dims[0]; // modulus gives remainder when dividing by num of columns = x index
+        int y_ind = cellId / dims[0]; // int division gives column index = y index
+
+        printf("Logical index for cellId %d is (%d, %d)\n", cellId, x_ind, y_ind);
+
+        float tot_x = 0;
+        for (int i = 0; i < x_ind + 1; i++)
+        {
+            // printf("X[%d] = %f, X[%d] = [%f]\n", i, X[i], i+1, X[i+1]);
+            tot_x += X[i+1] - X[i];
+        }
+
+        float tot_y = 0;
+        for (int i = 0; i < y_ind + 1; i++)
+        {
+            tot_y += Y[i+1] - Y[i];
+        }
+        
+        printf("tot_x = %f, tot_y = %f\n", tot_x, tot_y);
+        return tot_x*tot_y;
+    }
+    else
+    {
+        return 0;
+    }
 }
 
 // ****************************************************************************
