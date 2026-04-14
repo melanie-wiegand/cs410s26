@@ -5,6 +5,8 @@
 #include <vector>
 #include <stdexcept>
 
+# include <algorithm>
+
 using namespace std;
 
 // ─── VTK Reader ────────────────────────────────────────────────────────────────
@@ -197,7 +199,11 @@ float AreaForCell(const float *X, const float *Y, const int *dims, int cellId)
     // printf("dims = (%d, %d)\n", dims[0], dims[1]);
     // return dims[0]*dims[1];
 
-    if (cellId >= 0 && cellId < (dims[0] - 1)*(dims[1] - 1)) // cell dims are 1 less than point dims
+    if (cellId < 0 || cellId >= (dims[0] - 1)*(dims[1] - 1)) // cell dims are 1 less than point dims
+    {
+        return 0;
+    }
+    else
     {
         int x_ind = cellId % (dims[0] - 1); // modulus gives remainder when dividing by num of columns = x index
         int y_ind = cellId / (dims[0] - 1); // int division gives column index = y index
@@ -209,10 +215,6 @@ float AreaForCell(const float *X, const float *Y, const int *dims, int cellId)
         
         // printf("width = %f,  height = %f\n", width, height);
         return width*height;
-    }
-    else
-    {
-        return 0;
     }
 }
 
@@ -240,7 +242,66 @@ float EvaluateFieldAtLocation(const float *pt, const int *dims,
                                const float *X, const float *Y, const float *F)
 {
     // IMPLEMENT ME!
-    return 0;
+
+    if (pt[0] < X[0] || pt[0] > X[dims[0] - 1] || pt[1] < Y[0] || pt[1] > Y[dims[1] - 1]) // check bounds
+    {
+        return 0;
+    }
+    else 
+    {
+
+        // printf("point: (%f, %f)\n", pt[0], pt[1]);
+
+        // find first x point that is bigger (using std::lower_bound from <algorithm>
+        // pass pointers to first and last +1 indices
+        auto x_bound = std::lower_bound(X, X + dims[0], pt[0]); // right bound on x
+        if (x_bound == X || x_bound == X + dims[0]) // make sure it's in bounds
+        {
+            return 0;
+        }
+
+        float x_right = *x_bound;
+        float x_left = *(x_bound - 1);
+        // printf("right: %f, left: %f\n", x_right, x_left);
+        int xl_index = (x_bound - X) - 1; // convert from logical to sequential index
+
+        auto y_bound = std::lower_bound(Y, Y + dims[1], pt[1]); // top bound on y       
+        if (y_bound == Y || y_bound == Y + dims[1]) 
+        {
+            return 0;
+        }
+        
+        float y_top = *y_bound;
+        float y_bottom = *(y_bound - 1);
+        // printf("top: %f, bottom: %f\n", y_top, y_bottom);
+        int yb_index = (y_bound - Y) - 1; // convert from logical to sequential index
+
+        // corner indices
+        int bl = yb_index*dims[0] + xl_index; // bottom left 
+        int br = bl + 1; // bottom right
+        int tl = bl + dims[0]; // top left
+        int tr = tl + 1; // top right
+
+        // F values at corners
+        float bl_f = F[bl];
+        float br_f = F[br];
+        float tl_f = F[tl];
+        float tr_f = F[tr];
+
+
+        // bilinear interp
+
+        // bottom
+
+        float x_t = (pt[0] - x_left) / (x_right - x_left); // proportion of x between left & right bounds
+
+        float b_interp = bl_f + x_t*(br_f - bl_f); // value at x index along bottom
+        float t_interp = tl_f + x_t*(tr_f - tl_f); // value at x index along top
+
+        float y_t = (pt[1] - y_bottom) / (y_top - y_bottom); // proportion of y between bottom & top bounds
+
+        return b_interp + y_t*(t_interp - b_interp); // interpolation for y coord along x coord line
+    }
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
