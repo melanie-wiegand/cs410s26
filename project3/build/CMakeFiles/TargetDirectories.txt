@@ -1,0 +1,3 @@
+/mnt/c/Users/melan/OneDrive/Documents/GitHub/cs410s26/project3/build/CMakeFiles/proj3.dir
+/mnt/c/Users/melan/OneDrive/Documents/GitHub/cs410s26/project3/build/CMakeFiles/edit_cache.dir
+/mnt/c/Users/melan/OneDrive/Documents/GitHub/cs410s26/project3/build/CMakeFiles/rebuild_cache.dir
