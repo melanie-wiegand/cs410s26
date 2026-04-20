@@ -7,6 +7,8 @@
 #include <vtkActor.h>
 #include <vtkLookupTable.h>
 #include <vtkContourFilter.h>
+#include <vtkPlane.h>
+#include <vtkCutter.h>
 
 
 int main(int argc, char *argv[])
@@ -19,10 +21,19 @@ int main(int argc, char *argv[])
    mapper->SetInputData(reader->GetOutput());
    
    vtkLookupTable *lut = vtkLookupTable::New();
-   mapper->SetLookupTable(lut);
-   mapper->SetScalarRange(1,6);
+
+   // T4
+   
+   lut->SetNumberOfColors(256); // use all hex vals
+   
+   // lut->SetSaturationRange(1.0, 1.0);
+   lut->SetHueRange(1.1, 0.6); // blue to red
+   // lut->SetValueRange(1.0, 1.0);
    lut->Build();
 
+   mapper->SetLookupTable(lut);
+   mapper->SetScalarRange(reader->GetOutput()->GetScalarRange());
+   
    vtkActor *actor = vtkActor::New();
    actor->SetMapper(mapper);
 
@@ -32,11 +43,22 @@ int main(int argc, char *argv[])
    vtkRenderWindow *renwin = vtkRenderWindow::New();
    renwin->AddRenderer(ren);
 
-   vtkContourFilter *contour = vtkContourFilter::New();
+   vtkContourFilter *contour = vtkContourFilter::New(); //T2
    contour->SetInputConnection(reader->GetOutputPort());
    contour->SetValue(0, 2.4);
    contour->SetValue(1, 4.0);
    mapper->SetInputConnection(contour->GetOutputPort());
+
+
+   // vtkPlane *plane = vtkPlane::New();  // T3
+   // plane->SetOrigin(0, 0, 0);
+   // plane->SetNormal(0, 0, 1);
+
+   // vtkCutter *cutter = vtkCutter::New();
+   // cutter->SetCutFunction(plane);
+   // cutter->SetInputConnection(reader->GetOutputPort());
+   // mapper->SetInputConnection(cutter->GetOutputPort());
+
 
    vtkRenderWindowInteractor *iren = vtkRenderWindowInteractor::New();
    iren->SetRenderWindow(renwin);
@@ -45,7 +67,7 @@ int main(int argc, char *argv[])
    iren->Start();
 
    // cleanup
-   contour->Delete();
+   // contour->Delete();
    iren->Delete();
    renwin->Delete();
    ren->Delete();

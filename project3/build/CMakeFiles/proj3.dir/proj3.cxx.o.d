@@ -1,5 +1,5 @@
 CMakeFiles/proj3.dir/proj3.cxx.o: \
- /mnt/c/Users/melan/OneDrive/Documents/GitHub/cs410s26/project3/proj3.cxx \
+ /mnt/c/Users/Melanie/Documents/GitHub/cs410s26/project3/proj3.cxx \
  /usr/include/stdc-predef.h /usr/include/vtk-9.1/vtkRenderWindow.h \
  /usr/include/vtk-9.1/vtkDeprecation.h /usr/include/vtk-9.1/vtkVersion.h \
  /usr/include/vtk-9.1/vtkCommonCoreModule.h \
@@ -190,7 +190,7 @@ CMakeFiles/proj3.dir/proj3.cxx.o: \
  /usr/include/c++/13/bits/stl_relops.h \
  /usr/include/vtk-9.1/vtkRenderingCoreModule.h \
  /usr/include/vtk-9.1/vtkFiltersCoreModule.h \
- /mnt/c/Users/melan/OneDrive/Documents/GitHub/cs410s26/project3/build/CMakeFiles/vtkModuleAutoInit_b66b76486353ec844f5aad7cf7b10212.h \
+ /mnt/c/Users/Melanie/Documents/GitHub/cs410s26/project3/build/CMakeFiles/vtkModuleAutoInit_b66b76486353ec844f5aad7cf7b10212.h \
  /usr/include/vtk-9.1/vtkAutoInit.h \
  /usr/include/vtk-9.1/vtkDebugLeaksManager.h \
  /usr/include/vtk-9.1/vtkSmartPointer.h \
@@ -316,4 +316,7 @@ CMakeFiles/proj3.dir/proj3.cxx.o: \
  /usr/include/vtk-9.1/vtkAbstractCellLinks.h \
  /usr/include/vtk-9.1/vtkPolyDataInternals.h \
  /usr/include/vtk-9.1/vtkContourValues.h \
- /usr/include/vtk-9.1/vtkCommonMiscModule.h
+ /usr/include/vtk-9.1/vtkCommonMiscModule.h \
+ /usr/include/vtk-9.1/vtkPlane.h \
+ /usr/include/vtk-9.1/vtkImplicitFunction.h \
+ /usr/include/vtk-9.1/vtkCutter.h
