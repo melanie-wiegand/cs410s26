@@ -319,4 +319,6 @@ CMakeFiles/proj3.dir/proj3.cxx.o: \
  /usr/include/vtk-9.1/vtkCommonMiscModule.h \
  /usr/include/vtk-9.1/vtkPlane.h \
  /usr/include/vtk-9.1/vtkImplicitFunction.h \
- /usr/include/vtk-9.1/vtkCutter.h
+ /usr/include/vtk-9.1/vtkCutter.h /usr/include/vtk-9.1/vtkCamera.h \
+ /usr/include/vtk-9.1/vtkRect.h /usr/include/vtk-9.1/vtkVector.h \
+ /usr/include/vtk-9.1/vtkTuple.h

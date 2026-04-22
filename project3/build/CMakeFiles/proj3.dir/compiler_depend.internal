@@ -191,6 +191,7 @@ CMakeFiles/proj3.dir/proj3.cxx.o
  /usr/include/vtk-9.1/vtkBoundingBox.h
  /usr/include/vtk-9.1/vtkBuffer.h
  /usr/include/vtk-9.1/vtkBuild.h
+ /usr/include/vtk-9.1/vtkCamera.h
  /usr/include/vtk-9.1/vtkCell.h
  /usr/include/vtk-9.1/vtkCellArray.h
  /usr/include/vtk-9.1/vtkCellLinks.h
@@ -263,6 +264,7 @@ CMakeFiles/proj3.dir/proj3.cxx.o
  /usr/include/vtk-9.1/vtkProp3D.h
  /usr/include/vtk-9.1/vtkPropCollection.h
  /usr/include/vtk-9.1/vtkReaderAlgorithm.h
+ /usr/include/vtk-9.1/vtkRect.h
  /usr/include/vtk-9.1/vtkRenderWindow.h
  /usr/include/vtk-9.1/vtkRenderWindowInteractor.h
  /usr/include/vtk-9.1/vtkRenderer.h
@@ -275,6 +277,7 @@ CMakeFiles/proj3.dir/proj3.cxx.o
  /usr/include/vtk-9.1/vtkStdString.h
  /usr/include/vtk-9.1/vtkSystemIncludes.h
  /usr/include/vtk-9.1/vtkTimeStamp.h
+ /usr/include/vtk-9.1/vtkTuple.h
  /usr/include/vtk-9.1/vtkType.h
  /usr/include/vtk-9.1/vtkTypeInt32Array.h
  /usr/include/vtk-9.1/vtkTypeInt64Array.h
@@ -287,6 +290,7 @@ CMakeFiles/proj3.dir/proj3.cxx.o
  /usr/include/vtk-9.1/vtkVariant.h
  /usr/include/vtk-9.1/vtkVariantCast.h
  /usr/include/vtk-9.1/vtkVariantInlineOperators.h
+ /usr/include/vtk-9.1/vtkVector.h
  /usr/include/vtk-9.1/vtkVersion.h
  /usr/include/vtk-9.1/vtkVersionMacros.h
  /usr/include/vtk-9.1/vtkViewport.h
