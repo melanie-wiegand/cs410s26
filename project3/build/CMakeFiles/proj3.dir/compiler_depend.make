@@ -190,6 +190,7 @@ CMakeFiles/proj3.dir/proj3.cxx.o: /mnt/c/Users/Melanie/Documents/GitHub/cs410s26
   /usr/include/vtk-9.1/vtkBoundingBox.h \
   /usr/include/vtk-9.1/vtkBuffer.h \
   /usr/include/vtk-9.1/vtkBuild.h \
+  /usr/include/vtk-9.1/vtkCamera.h \
   /usr/include/vtk-9.1/vtkCell.h \
   /usr/include/vtk-9.1/vtkCellArray.h \
   /usr/include/vtk-9.1/vtkCellLinks.h \
@@ -262,6 +263,7 @@ CMakeFiles/proj3.dir/proj3.cxx.o: /mnt/c/Users/Melanie/Documents/GitHub/cs410s26
   /usr/include/vtk-9.1/vtkProp3D.h \
   /usr/include/vtk-9.1/vtkPropCollection.h \
   /usr/include/vtk-9.1/vtkReaderAlgorithm.h \
+  /usr/include/vtk-9.1/vtkRect.h \
   /usr/include/vtk-9.1/vtkRenderWindow.h \
   /usr/include/vtk-9.1/vtkRenderWindowInteractor.h \
   /usr/include/vtk-9.1/vtkRenderer.h \
@@ -274,6 +276,7 @@ CMakeFiles/proj3.dir/proj3.cxx.o: /mnt/c/Users/Melanie/Documents/GitHub/cs410s26
   /usr/include/vtk-9.1/vtkStdString.h \
   /usr/include/vtk-9.1/vtkSystemIncludes.h \
   /usr/include/vtk-9.1/vtkTimeStamp.h \
+  /usr/include/vtk-9.1/vtkTuple.h \
   /usr/include/vtk-9.1/vtkType.h \
   /usr/include/vtk-9.1/vtkTypeInt32Array.h \
   /usr/include/vtk-9.1/vtkTypeInt64Array.h \
@@ -286,6 +289,7 @@ CMakeFiles/proj3.dir/proj3.cxx.o: /mnt/c/Users/Melanie/Documents/GitHub/cs410s26
   /usr/include/vtk-9.1/vtkVariant.h \
   /usr/include/vtk-9.1/vtkVariantCast.h \
   /usr/include/vtk-9.1/vtkVariantInlineOperators.h \
+  /usr/include/vtk-9.1/vtkVector.h \
   /usr/include/vtk-9.1/vtkVersion.h \
   /usr/include/vtk-9.1/vtkVersionMacros.h \
   /usr/include/vtk-9.1/vtkViewport.h \
@@ -404,8 +408,6 @@ CMakeFiles/proj3.dir/proj3.cxx.o: /mnt/c/Users/Melanie/Documents/GitHub/cs410s26
   /usr/lib/gcc/x86_64-linux-gnu/13/include/stdint.h \
   /usr/lib/gcc/x86_64-linux-gnu/13/include/syslimits.h
 
-
-/usr/lib/gcc/x86_64-linux-gnu/13/include/stdint.h:
 
 /usr/lib/gcc/x86_64-linux-gnu/13/include/stddef.h:
 
@@ -573,6 +575,8 @@ CMakeFiles/proj3.dir/proj3.cxx.o: /mnt/c/Users/Melanie/Documents/GitHub/cs410s26
 
 /usr/include/vtk-9.1/vtkType.h:
 
+/usr/include/vtk-9.1/vtkTuple.h:
+
 /usr/include/vtk-9.1/vtkSystemIncludes.h:
 
 /usr/include/vtk-9.1/vtkStdString.h:
@@ -723,6 +727,8 @@ CMakeFiles/proj3.dir/proj3.cxx.o: /mnt/c/Users/Melanie/Documents/GitHub/cs410s26
 
 /usr/include/c++/13/bits/stl_bvector.h:
 
+/usr/include/vtk-9.1/vtkRect.h:
+
 /usr/include/c++/13/bits/stl_algobase.h:
 
 /usr/include/c++/13/bits/stl_algo.h:
@@ -790,6 +796,8 @@ CMakeFiles/proj3.dir/proj3.cxx.o: /mnt/c/Users/Melanie/Documents/GitHub/cs410s26
 /usr/include/c++/13/atomic:
 
 /usr/include/c++/13/tr1/poly_laguerre.tcc:
+
+/usr/include/vtk-9.1/vtkVector.h:
 
 /usr/include/libintl.h:
 
@@ -1117,6 +1125,10 @@ CMakeFiles/vtkModuleAutoInit_b66b76486353ec844f5aad7cf7b10212.h:
 
 /usr/include/vtk-9.1/vtkBuild.h:
 
+/usr/lib/gcc/x86_64-linux-gnu/13/include/stdint.h:
+
+/usr/include/vtk-9.1/vtkCamera.h:
+
 /usr/include/vtk-9.1/vtkReaderAlgorithm.h:
 
 /usr/include/vtk-9.1/vtkCell.h:
@@ -1191,6 +1203,10 @@ CMakeFiles/vtkModuleAutoInit_b66b76486353ec844f5aad7cf7b10212.h:
 
 /usr/include/vtk-9.1/vtkMatrixUtilities.h:
 
+/usr/include/vtk-9.1/vtkPolyDataInternals.h:
+
+/usr/include/vtk-9.1/vtkMeta.h:
+
 /usr/include/vtk-9.1/vtkVolume.h:
 
 /usr/include/vtk-9.1/vtkNew.h:
@@ -1204,7 +1220,3 @@ CMakeFiles/vtkModuleAutoInit_b66b76486353ec844f5aad7cf7b10212.h:
 /usr/include/vtk-9.1/vtkABI.h:
 
 /usr/include/vtk-9.1/vtkPolyData.h:
-
-/usr/include/vtk-9.1/vtkMeta.h:
-
-/usr/include/vtk-9.1/vtkPolyDataInternals.h:
