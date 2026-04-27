@@ -190,20 +190,28 @@ def draw(case, triangles):
 
     for ei in range(12):
         mp = edge_midpoint(ei)
-        if ei in used_edges:
-            ax.scatter(*mp, color='#ffd93d', s=50, zorder=6,
-                       depthshade=False, edgecolors='white', linewidths=0.5)
-            # Offset label away from cube centre
-            centre = np.array([0.5, 0.5, 0.5])
-            direction = mp - centre
-            if np.linalg.norm(direction) < 1e-6:
-                direction = np.array([0, 0, 1])
-            direction = direction / np.linalg.norm(direction)
-            lp = mp + direction * 0.10
-            ax.text(lp[0], lp[1], lp[2],
-                    f'E{ei}',
-                    color='#ffd93d', fontsize=7.5, fontweight='bold',
-                    ha='center', va='center', zorder=10)
+        is_active = ei in used_edges
+        
+        # Dot at midpoint
+        color = '#ffd93d' if is_active else '#6a6a8a'
+        size  = 50        if is_active else 25
+        ax.scatter(*mp, color=color, s=size, zorder=6,
+                   depthshade=False, edgecolors='white', linewidths=0.5)
+
+        # Label offset away from cube centre
+        centre    = np.array([0.5, 0.5, 0.5])
+        direction = mp - centre
+        if np.linalg.norm(direction) < 1e-6:
+            direction = np.array([0, 0, 1])
+        direction = direction / np.linalg.norm(direction)
+        lp = mp + direction * 0.10
+
+        ax.text(lp[0], lp[1], lp[2],
+                f'E{ei}',
+                color='#ffd93d' if is_active else '#f8d0ab',
+                fontsize=7.5,
+                fontweight='bold' if is_active else 'normal',
+                ha='center', va='center', zorder=10)
 
     # ── Triangles ─────────────────────────────────────────────────────────────
     COLORS = ['#ff9f43', '#48dbfb', '#ff6b9d', '#a29bfe', '#55efc4']
@@ -235,6 +243,7 @@ def draw(case, triangles):
         mpatches.Patch(facecolor='#ff6b6b', edgecolor='white', label=f'High vertices: {[f"V{v}" for v in high]}'),
         mpatches.Patch(facecolor='#4ecdc4', edgecolor='white', label=f'Low vertices:  {[f"V{v}" for v in low]}'),
         mpatches.Patch(facecolor='#ffd93d', edgecolor='white', label=f'Active edges:  {[f"E{e}" for e in used_edges]}'),
+        mpatches.Patch(facecolor="#8a7c6a", edgecolor='white', label='Inactive edges'),
     ]
     for ti, tri_edges in enumerate(triangles):
         legend_elements.append(
