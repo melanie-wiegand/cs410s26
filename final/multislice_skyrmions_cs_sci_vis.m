@@ -577,20 +577,28 @@ hue = (m_theta + pi) / (2*pi);
 % saturation stays full
 saturation = ones(size(hue));
 
-% brightness: use mz for white/black contrast
-% map [-1,1] → [0,1]
-brightness = (mz + 1) / 2;
+brightness = ones(size(hue));
 
-% optional: blend magnitude into brightness (gives nicer skyrmion visibility)
-scale = max(m_mag_xy);
-if scale < 1e-12
-    scale = 1;
-end
-brightness = 0.2 + 0.8 * brightness .* (m_mag_xy / scale);
+% % brightness: use mz for white/black contrast
+% % map [-1,1] → [0,1]
+% brightness = (mz + 1) / 2;
+% 
+% % optional: blend magnitude into brightness (gives nicer skyrmion visibility)
+% scale = max(m_mag_xy);
+% if scale < 1e-12
+%     scale = 1;
+% end
+% brightness = 0.2 + 0.8 * brightness .* (m_mag_xy / scale);
+% 
+% 
+% % convert
+% rgb = hsv2rgb(cat(3, hue, saturation, brightness));
 
+RGB = hsv2rgb([hue saturation brightness]);
 
-% convert
-rgb = hsv2rgb(cat(3, hue, saturation, brightness));
+R = RGB(:,1);
+G = RGB(:,2);
+B = RGB(:,3);
 
 
 % force col vectors
@@ -608,9 +616,13 @@ addScalar(doc, pointData, 'm_norm', m_norm);
 addScalar(doc, pointData, 'layer_id', layer_id);
 addScalar(doc, pointData, 'theta_sin', theta_sin);
 addScalar(doc, pointData, 'theta_cos', theta_cos);
-addScalar(doc, pointData, 'color_r', rgb(:,1));
-addScalar(doc, pointData, 'color_g', rgb(:,2));
-addScalar(doc, pointData, 'color_b', rgb(:,3));
+% addScalar(doc, pointData, 'color_r', rgb(:,1));
+% addScalar(doc, pointData, 'color_g', rgb(:,2));
+% addScalar(doc, pointData, 'color_b', rgb(:,3));
+addScalar(doc, pointData, 'R', R);
+addScalar(doc, pointData, 'G', G);
+addScalar(doc, pointData, 'B', B);
+
 
 % write final file
 out_vts = fullfile(vtk_dir,'m_field_augmented.vts');
