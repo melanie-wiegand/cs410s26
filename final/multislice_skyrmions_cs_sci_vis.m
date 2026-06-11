@@ -1,0 +1,2040 @@
+%% 4D-STEM Simulation with Skyrmions
+% Author:   Malik Hollis
+% Updated:  12/1/2025
+
+%% INITIALIZE
+%#ok<*UNRCH>
+% close all; 
+clear; clc;
+
+% Start parallel process pool
+delete(gcp('nocreate'));
+pool = parpool('Processes_16',16);
+
+%% COMPUTEM PARAMETERS:
+%  atomic_coords:                         Name of file with input atomic coord. in x,y,z format
+%  Nuc_x, Nuc_y, N_layer:                 Replicate unit cell by NCELLX, NCELLY, NCELLZ
+%  wavefcn_tif:                           Name of file to get binary output of multislice result
+%  part_coher:                            Do you want to include partial coherence (y/n)
+%  illu_min, illu_max:                    Illumination angle min, max in mrad
+%  df, mean, stdev, sampling_size:        Defocus, mean, standard deviation, and sampling size (in Angstroms)
+%  cbed_tds:                              Do you want to calculate CBED with TDS (thermal diffuse scattering) (y/n)
+%  diffraction_tds:                       Do you want to calculate diffraction with TDS (y/n)
+%  prev_result:                           Do you want to start from previous result (y/n)
+%  beam_vs_thickness:                     Do you want to record the (real,imag) value of selected beams vs. thickness (y/n)
+%  beam_info:                             Name of file for beams info
+%  N_beams:                               Number of beams
+%  beam_h_vals, beam_k_vals:              Beam (N), h,k
+%  intensity_vs_depth:                    Do you want to output intensity vs. depth cross section (y/n)
+%  depth_profile:                         Type name of file to get depth profile image
+%  depth_y_pos:                           Type y position of depth cross section (in Ang.)
+%  c3, c5:                                Spherical aberration Cs3, Cs5 (in mm)
+%  df:                                    Defocus (in Angstroms)
+%  obj_apert:                             Objective aperture (in mrad)
+%  HO_aber:                               Type higher order aber. name (as C32a, etc.) followed by a value in mm. (END to end)
+%  rand_tunning:                          Do you want to add random pi/4 tunning errors for orders 2 to 5 (y/n)
+%  probe_position_x, probe_position_y:    CBED probe postion (in Angstroms)
+%  voltage:                               Incident beam energy (in keV)
+%  Nx, Ny:                                Wavefunction size in pixels, Nx,Ny
+%  tilt_x, tilt_y:                        Crystal tilt x,y in mrad.
+%  delta_z:                               Slice thickness (in Angstroms)
+%  thermal_vib:                           Do you want to include thermal vibrations (y/n)
+%  temp:                                  Type the temperature in degrees K
+%  N_config:                              Type number of configurations to average over
+%  log_scale:                             Do you want to output intensity on a log scale (y/n)
+%  ax, by:                                Size of output image in Angstroms
+%  probe_type:                            Type 0 for probe wave function, or 1 for probe intensity squared, or 2 for 2D aberration phase error
+%  probe_tif:                             Name of file to get focused probe wave function, or intensity squared, or 2D aberration phase error
+%  smooth_apert:                          Type 1 for smooth aperture
+
+
+%% ################################################## SETTINGS & PARAMETERS ##################################################
+
+% Simulation directory
+sim_name = 'scivis/vtk'; % simulation directory
+
+% Simulation settings
+save_AB_phase_tif =     true;   % save AB phase stack from mansuripur algorithm
+save_probe_tif =        false;  % save probe tif
+save_wavefcn_tif =      false;  % save wavefunction tif
+save_wavefcn_4d =       false;  % save wavefunction as 4D dataset
+save_cbed_tif =         false;  % save cbed tif
+
+% Computem settings
+probe_type =            0;      % 0 (probe wavefunction)
+smooth_apert =          0;      % aperture 
+
+% Computem functions
+% atompot_exe = 'C:\Users\malik\OneDrive\Documents\UO\Multislice\computem_win64\atompot.exe';
+% mulslice_exe = 'C:\Users\malik\OneDrive\Documents\UO\Multislice\computem_win64\mulslice.exe';
+% probe_exe = 'C:\Users\malik\OneDrive\Documents\UO\Multislice\computem_win64\probe.exe';
+% image_exe = 'C:\Users\malik\OneDrive\Documents\UO\Multislice\computem_win64\image.exe';
+
+atompot_exe = 'C:\Users\Melanie\Desktop\KXN\code\computem\win64exe\atompot.exe';
+mulslice_exe = 'C:\Users\Melanie\Desktop\KXN\code\computem\win64exe\mulslice.exe';
+probe_exe = 'C:\Users\Melanie\Desktop\KXN\code\computem\win64exe\probe.exe';
+image_exe = 'C:\Users\Melanie\Desktop\KXN\code\computem\win64exe\image.exe';
+
+
+% Probe parameters
+voltage = 200;        % beam energy (keV)
+c3 = 0;               % spherical aber. Cs3 (mm)
+c5 = 0;               % spherical aber. Cs5 (mm)
+HO_aber = 'END';      % H.O. aber. (mm) or 'END' for none
+df = 0;               % defocus (Angstrom)
+alpha = 0.5;          % objective aperature semi-angle (mrad) (20 for small probe)
+Nx = 48;             % wavefunction size x (# pixels) (integer)
+Ny = Nx;              % wavefunction size y (# pixels) (integer)
+prop_scale = 1;
+
+% Sample parameters
+sample_name = 'hybrid';  % sample name
+cell_size_x = 4.671 / 8;        % Angstrom
+cell_size_y = 4.671 / 8;        % Angstrom
+cell_size_z = 200 * cell_size_x / 128; % Angstrom (increased propagation distance)
+slices_per_zcell = 1;       % number of slices (z direction) in a unit cell           
+N_layers = 24               % total number of slices (integer)
+theta = 0;                  % sample tilt about x-axis (deg)
+gamma = 0;                  % sample tilt about y-axis (deg)
+
+% Scanning parameters
+NUC_x = 100;           % number of unit cells in FOV x (integer) (default 200) (10 for small probe)
+NUC_y = NUC_x;         % number of unit cells in FOV y (integer)
+N_scan_position = 64;  % number of scan positions in each direction 
+
+% Skyrmion parameters
+skyrmion_type = 'Hybrid';    % 'Bloch', 'Neel', 'Hybrid', 'Pinched'
+skyrmion_count = 1;         % 1 or 2 (chiral) (only 1 for pinched)
+sk_chirality = 1;           % Bloch: (chirality > 0 = CW), (chirality < 0 = CCW), Neel: (chirality > 0 = DW points out), (chirality < 0 = DW points in)
+sk_mz_center = 1;          % m_z direction at skyrmion center (-1 = -z, +1 = +z), outside is -m_z
+
+% Magnetism parameters
+M_sat = 0.16;           % Saturation magnetization
+A_ex = 1.35e-12;        % Exchange interaction
+mu_0 = 4*pi*(10^-7);    % Vacuum permeability
+
+% Constants
+e = -1.602e-19;         % Electron charge (C)
+hbar = 1.055e-34;       % Reduced Planck constant (Js)
+m0 = 9.109e-31;         % Electron mass (kg)
+h = hbar * 2 * pi;      % Plack constant
+c = 299792458;          % Speed of light (m/s)
+
+% Data settings
+data_filename = sprintf('4D_data_%s.mat',sample_name);
+data_wavefcn_filename = sprintf('4D_wavefcn_data.mat');
+metadata = {'voltage','df','step_size','alpha','thickness','sample_name','N_layers','NUC_x','NUC_y','N_scan_position','Nx','Ny','skyrmion_type','theta','gamma'};
+
+% ############################################################################################################################
+%% MISC. CALCULATIONS AND SETUP
+
+% Size of output image (Angstrom)
+% FOV for scan positions matrix
+ax = cell_size_x * NUC_x; % field of view x (Angstrom)
+by = cell_size_y * NUC_y; % field of view y (Angstrom)
+
+% Beam tilt
+tilt_x = deg2rad(theta) * 1e3; % tilt about x (theta) (mrad) 
+tilt_y = deg2rad(gamma) * 1e3; % tilt about y (gamma) (mrad) 
+
+% Step size (Angstrom)
+step_size = ax / N_scan_position;
+
+% Calculate sample thickness
+delta_z = cell_size_z / slices_per_zcell; % slice thickness (Angstrom)
+thickness = delta_z * N_layers;           % total thickness (Angstrom)
+
+% Skyrmion default scaling values
+sk_NUC = 160;                   % number of unit cells skyrmion spans (default 200) (130 for ptycho) (3 for small probe)
+sk_pixels = 48;                 % pixels in micromagnetic grid (default 64)
+sk_size = sk_NUC * cell_size_x; % real space skyrmion diameter (Angstrom)
+
+% Create matrices of x and y probe positions
+probe_pos = linspace(-floor(N_scan_position / 2), ceil(N_scan_position / 2) - 1, N_scan_position);
+probe_pos_y = (probe_pos * step_size) + (by / (N_scan_position/floor(N_scan_position / 2)));
+probe_pos_x = (probe_pos * step_size) + (ax / (N_scan_position/floor(N_scan_position / 2)));
+[probe_pos_X, probe_pos_Y] = meshgrid(probe_pos_x, probe_pos_y);
+
+% Electron wavelength
+% lambda = h * c / sqrt(abs(e) * voltage * (2 * m0 * c^2 + abs(e) * voltage) );
+lambda = 2.51e-12;  % (meters) @ 200 keV
+
+
+%% DIRECTORY SETUP
+
+% Data folder name
+data_folder = sprintf('Results\\%s\\voltage%g_alpha%g_df%g_thickness%gA\\scan%g_nuc%g_step%gA_pixels%g_layers%g\\%s_count%g_theta%g_gamma%g', ...
+                        sim_name, voltage,alpha,df,thickness, N_scan_position,NUC_x,step_size,Nx,N_layers, skyrmion_type,skyrmion_count,theta,gamma);
+
+% Create data folder
+if exist(data_folder,'dir') ~= 7
+    mkdir(data_folder);
+    fprintf('\nCreated data directory: %s.\n\n',data_folder);
+else
+    fprintf('\nData diretory already exists: %s.\n\n',data_folder);
+end
+
+
+%% CREATE MAGNETIZATION FIELD
+
+% % when using small probe, force mumax to use realistic sizing (comment out for normal probe)
+% ax2 = ax;
+% by2 = by;
+% NUC_x2 = NUC_x;
+% NUC_y2 = NUC_y;
+% NUC_x = 200;
+% NUC_y = 200;
+% ax = cell_size_x * NUC_x;
+% by = cell_size_y * NUC_y;
+
+% Define micromagnetic grid
+x = linspace(-ax/2, ax/2, Nx) * (10^-10);         % x range (meters)
+y = linspace(-by/2, by/2, Ny) * (10^-10);         % y range (meters)
+z = linspace(0, thickness, N_layers) * (10^-10);  % z range (meters)
+[X, Y, Z] = meshgrid(x, y, z);
+
+% Define voxel size
+dx = (ax*10^-10)/Nx; % voxel size x (m)
+dy = (by*10^-10)/Ny; % voxel size y (m)
+dz = dx % voxel size z (m)
+
+% Generate magnetization field(s)
+key = sprintf('%s %d', skyrmion_type, skyrmion_count);
+switch key
+
+    case {'Bloch 1', 'Neel 1'}
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Single skyrmion field %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Format mumax data
+mumax_input_data = sprintf(['SetGridsize(%g,%g,%g)\n','SetCellsize(%g,%g,%g)\n','\n','Msat = %g\n','Aex = %g\n','\n', ...
+                'm = %sSkyrmion(%g,%g).scale(%g,%g,1)\n','saveas(m,"m_field")'], ...
+                Nx,Ny,N_layers, dx,dy,dz, M_sat, A_ex, ...
+                skyrmion_type, sk_chirality,sk_mz_center, (Nx/sk_pixels)*(sk_NUC/NUC_x),(Ny/sk_pixels)*(sk_NUC/NUC_y));
+
+% Create mumax input file
+mumax_input_txt = fullfile(pwd, data_folder, 'mumax_script.txt');
+mumax_script = fopen(mumax_input_txt, 'w');
+fwrite(mumax_script, mumax_input_data);
+fclose(mumax_script);
+
+% Create m field
+[~,~] = system(sprintf('mumax3 %s', mumax_input_txt));
+mumax_output = fullfile(pwd, data_folder, 'mumax_script.out');
+
+% Read m field
+[~,~] = system(sprintf('mumax3-convert -csv %s', fullfile(mumax_output,'m_field.ovf')));
+m_field = load(fullfile(mumax_output,'m_field.csv'));
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Single skyrmion field %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+    case {'Bloch 2', 'Neel 2'}
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Double skyrmion field %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+sk_translation = 15e-9; % (m) move skyrmion center from origin
+
+% %%%%%%%%%%%%%%%%%%%% Skyrmion 1 %%%%%%%%%%%%%%%%%%%%
+% Format mumax data
+mumax_input_data1 = sprintf(['SetGridsize(%g,%g,%g)\n','SetCellsize(%ge-10/%g,%ge-10/%g,%ge-10/%g)\n','\n','Msat = %g\n','Aex = %g\n','\n', ...
+                'm = %sSkyrmion(%g,%g).scale(%g,%g,1).transl(%g,0,0)\n','saveas(m,"m_field1")'], ...
+                Nx,Ny,N_layers, ax,Nx,by,Ny,thickness,N_layers, M_sat, A_ex, ...
+                skyrmion_type, sk_chirality,sk_mz_center, (Nx/sk_pixels)*(sk_NUC/NUC_x),(Ny/sk_pixels)*(sk_NUC/NUC_y), sk_translation);
+
+% Create mumax input file
+mumax_input_txt1 = fullfile(pwd, data_folder, 'mumax_script1.txt');
+mumax_script1 = fopen(mumax_input_txt1, 'w');
+fwrite(mumax_script1, mumax_input_data1);
+fclose(mumax_script1);
+
+% Create m field
+[~,~] = system(sprintf('mumax3 %s', mumax_input_txt1));
+mumax_output1 = fullfile(pwd, data_folder, 'mumax_script1.out');
+
+% Read m field
+[~,~] = system(sprintf('mumax3-convert -csv %s', fullfile(mumax_output1,'m_field1.ovf')));
+m_field1 = load(fullfile(mumax_output1,'m_field1.csv'));
+% %%%%%%%%%%%%%%%%%%%% Skyrmion 1 %%%%%%%%%%%%%%%%%%%%
+
+% %%%%%%%%%%%%%%%%%%%% Skyrmion 2 %%%%%%%%%%%%%%%%%%%%
+% Format mumax data
+mumax_input_data2 = sprintf(['SetGridsize(%g,%g,%g)\n','SetCellsize(%ge-10/%g,%ge-10/%g,%ge-10/%g)\n','\n','Msat = %g\n','Aex = %g\n','\n', ...
+                'm = %sSkyrmion(%g,%g).scale(%g,%g,1).transl(%g,0,0)\n','saveas(m,"m_field2")'], ...
+                Nx,Ny,N_layers, ax,Nx,by,Ny,thickness,N_layers, M_sat, A_ex, ...
+                skyrmion_type, -sk_chirality,sk_mz_center, (Nx/sk_pixels)*(sk_NUC/NUC_x),(Ny/sk_pixels)*(sk_NUC/NUC_y), -sk_translation);
+
+% Create mumax input file
+mumax_input_txt2 = fullfile(pwd, data_folder, 'mumax_script2.txt');
+mumax_script2 = fopen(mumax_input_txt2, 'w');
+fwrite(mumax_script2, mumax_input_data2);
+fclose(mumax_script2);
+
+% Create m field
+[~,~] = system(sprintf('mumax3 %s', mumax_input_txt2));
+mumax_output2 = fullfile(pwd, data_folder, 'mumax_script2.out');
+
+% Read m field
+[~,~] = system(sprintf('mumax3-convert -csv %s', fullfile(mumax_output2,'m_field2.ovf')));
+m_field2 = load(fullfile(mumax_output2,'m_field2.csv'));
+% %%%%%%%%%%%%%%%%%%%% Skyrmion 2 %%%%%%%%%%%%%%%%%%%%
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Double skyrmion field %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+    case 'Pinched 1'
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Pinched Single skyrmion field %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Define regions
+region_strs = repmat('defregion(%g,layer(%g))\n', 1, N_layers);
+region_nums = [1:N_layers; 0:(N_layers-1)];
+regions = sprintf(region_strs, region_nums);
+
+% Define skyrmion scaling
+scale_x = (Nx/sk_pixels)*(sk_NUC/NUC_x);
+scale_y = (Ny/sk_pixels)*(sk_NUC/NUC_y);
+
+% Even number layers
+if rem(N_layers,2) == 0
+
+    % Number of hybrid layers between middle and top/bottom
+    N_center_layers = floor((N_layers - 1) / 2);
+
+    % Define skyrmions in top region
+    scaling_top = flip(linspace(0, 1, N_center_layers));
+    skyrmion_top_strs = repmat('m.setregion(%g,blochskyrmion(%g, %g).scale(%g,%g,1).scale(%g,%g,1))\n', 1, N_center_layers);
+    skyrmion_top_params = [region_nums(1,1:N_center_layers); sk_chirality*ones(1,N_center_layers);sk_mz_center*ones(1,N_center_layers); scale_x*ones(1,N_center_layers);scale_y*ones(1,N_center_layers); scaling_top;scaling_top];
+    skyrmion_top = sprintf(skyrmion_top_strs, skyrmion_top_params);
+
+    % Define center skyrmions
+    skyrmion_center1 = sprintf('m.setregion(%g,blochskyrmion(%g, %g).scale(%g,%g,1).scale(%g,%g,1))\n', region_nums(1,N_layers/2), sk_chirality,sk_mz_center, scale_x,scale_y, 0,0);
+    skyrmion_center2 = sprintf('m.setregion(%g,blochskyrmion(%g, %g).scale(%g,%g,1).scale(%g,%g,1))\n', region_nums(1,(N_layers/2)+1), sk_chirality,sk_mz_center, scale_x,scale_y, 0,0);
+    skyrmion_center = [skyrmion_center1 skyrmion_center2];
+
+    % Define skyrmions in bottom region
+    scaling_bot = linspace(0, 1, N_center_layers);
+    skyrmion_bot_strs = repmat('m.setregion(%g,blochskyrmion(%g, %g).scale(%g,%g,1).scale(%g,%g,1))\n', 1, N_center_layers);
+    skyrmion_bot_params = [region_nums(1,((N_layers/2)+2):N_layers); sk_chirality*ones(1,N_center_layers);sk_mz_center*ones(1,N_center_layers); scale_x*ones(1,N_center_layers);scale_y*ones(1,N_center_layers); scaling_bot;scaling_bot];
+    skyrmion_bot = sprintf(skyrmion_bot_strs, skyrmion_bot_params);
+
+
+% Odd number layers
+else
+
+    % Number of hybrid layers between middle and top/bottom
+    N_center_layers = (N_layers - 1) / 2;
+
+    % Define skyrmions in top region
+    scaling_top = flip(linspace(0, 1, N_center_layers));
+    skyrmion_top_strs = repmat('m.setregion(%g,blochskyrmion(%g, %g).scale(%g,%g,1).scale(%g,%g,1))\n', 1, N_center_layers);
+    skyrmion_top_params = [region_nums(1,1:N_center_layers); sk_chirality*ones(1,N_center_layers);sk_mz_center*ones(1,N_center_layers); scale_x*ones(1,N_center_layers);scale_y*ones(1,N_center_layers); scaling_top;scaling_top];
+    skyrmion_top = sprintf(skyrmion_top_strs, skyrmion_top_params);
+
+    % Define center skyrmions
+    skyrmion_center = sprintf('m.setregion(%g,blochskyrmion(%g, %g).scale(%g,%g,1).scale(%g,%g,1))\n', region_nums(1,N_layers/2), sk_chirality,sk_mz_center, scale_x,scale_y, 0,0);
+
+    % Define skyrmions in bottom region
+    scaling_bot = linspace(0, 1, N_center_layers);
+    skyrmion_bot_strs = repmat('m.setregion(%g,blochskyrmion(%g, %g).scale(%g,%g,1).scale(%g,%g,1))\n', 1, N_center_layers);
+    skyrmion_bot_params = [region_nums(1,(round(N_layers/2)+1):N_layers); sk_chirality*ones(1,N_center_layers);sk_mz_center*ones(1,N_center_layers); scale_x*ones(1,N_center_layers);scale_y*ones(1,N_center_layers); scaling_bot;scaling_bot];
+    skyrmion_bot = sprintf(skyrmion_bot_strs, skyrmion_bot_params);
+
+end
+
+% Define skyrmion stack
+skyrmions = [skyrmion_top, skyrmion_center, skyrmion_bot];
+
+% Format full mumax data
+mumax_input_data = sprintf(['setgridsize(%g,%g,%g)\n' ...
+                            'setcellsize(%g,%g,%g)\n' ...
+                            '\n' ...
+                            'Msat = 580e3\n' ...
+                            'Aex = 15e-12\n' ...
+                            '\n' ...
+                            '// define layers\n' ...
+                            regions ...
+                            '\n' ...
+                            '//define initial magnetization\n' ...
+                            skyrmions ...
+                            '\n' ...
+                            'saveas(m,"m_field")'], ...
+                            Nx,Ny,N_layers, ...
+                            dx,dy,dz);
+
+% Create mumax input file
+mumax_input_txt = fullfile(pwd, data_folder, 'mumax_script.txt');
+mumax_script = fopen(mumax_input_txt, 'w');
+fwrite(mumax_script, mumax_input_data);
+fclose(mumax_script);
+
+% Create m field
+[~,~] = system(sprintf('mumax3 %s', mumax_input_txt));
+mumax_output = fullfile(pwd, data_folder, 'mumax_script.out');
+
+% Read m field
+[~,~] = system(sprintf('mumax3-convert -csv %s', fullfile(mumax_output,'m_field.ovf')));
+m_field = load(fullfile(mumax_output,'m_field.csv'));
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Pinched Single skyrmion field %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+    case 'Hybrid 1'
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Single Hybrid skyrmion field %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Define regions
+region_strs = repmat('defregion(%g,layer(%g))\n', 1, N_layers);
+region_nums = [1:N_layers; 0:(N_layers-1)];
+regions = sprintf(region_strs, region_nums);
+
+% Define hybrid scaling: [bloch + (scale * neel)]
+hybrid_scale_min = 0.1; % scaling near center (bloch)
+hybrid_scale_max = 5;   % scaling near caps (neel)
+
+% Define top neel skyrmion
+skyrmion_neel_top = sprintf('m.setregion(%g,neelskyrmion(%g, %g).scale(%g,%g,1))\n', region_nums(1,1), sk_chirality,sk_mz_center, (Nx/sk_pixels)*(sk_NUC/NUC_x),(Ny/sk_pixels)*(sk_NUC/NUC_y));
+
+% Even number layers
+if rem(N_layers,2) == 0
+
+    % Number of hybrid layers between middle and top/bottom
+    N_hybrid_layers = floor((N_layers - 3) / 2);
+
+    % Define hybrid skyrmions in top region
+    % hybrid_scaling_top = flip(1:N_hybrid_layers);
+    hybrid_scaling_top = flip(linspace(hybrid_scale_min, hybrid_scale_max, N_hybrid_layers));
+    skyrmion_hybrid_top_strs = repmat('m.setregion(%g,blochskyrmion(%g, %g).add(%g,neelskyrmion(%g, %g)).scale(%g,%g,1))\n', 1, N_hybrid_layers);
+    skyrmion_top_params = [region_nums(1,2:(N_hybrid_layers+1)); sk_chirality*ones(1,N_hybrid_layers);sk_mz_center*ones(1,N_hybrid_layers); hybrid_scaling_top; sk_chirality*ones(1,N_hybrid_layers);sk_mz_center*ones(1,N_hybrid_layers); (Nx/sk_pixels)*(sk_NUC/NUC_x)*ones(1,N_hybrid_layers);(Ny/sk_pixels)*(sk_NUC/NUC_y)*ones(1,N_hybrid_layers)];
+    skyrmion_hybrid_top = sprintf(skyrmion_hybrid_top_strs, skyrmion_top_params);
+
+    % Define center bloch skyrmions
+    skyrmion_bloch_mid1 = sprintf('m.setregion(%g,blochskyrmion(%g, %g).scale(%g,%g,1))\n', region_nums(1,N_layers/2), sk_chirality,sk_mz_center, (Nx/sk_pixels)*(sk_NUC/NUC_x),(Ny/sk_pixels)*(sk_NUC/NUC_y));
+    skyrmion_bloch_mid2 = sprintf('m.setregion(%g,blochskyrmion(%g, %g).scale(%g,%g,1))\n', region_nums(1,(N_layers/2)+1), sk_chirality,sk_mz_center, (Nx/sk_pixels)*(sk_NUC/NUC_x),(Ny/sk_pixels)*(sk_NUC/NUC_y));
+    skyrmion_bloch_mid = [skyrmion_bloch_mid1 skyrmion_bloch_mid2];
+
+    % Define hybrid skyrmions in bottom region
+    hybrid_scaling_bot = linspace(hybrid_scale_min, hybrid_scale_max, N_hybrid_layers);
+    skyrmion_hybrid_bot_strs = repmat('m.setregion(%g,blochskyrmion(%g, %g).add(%g,neelskyrmion(%g, %g)).scale(%g,%g,1))\n', 1, N_hybrid_layers);
+    skyrmion_bot_params = [region_nums(1,((N_layers/2)+2):(N_layers-1)); sk_chirality*ones(1,N_hybrid_layers);sk_mz_center*ones(1,N_hybrid_layers); hybrid_scaling_bot; -sk_chirality*ones(1,N_hybrid_layers);sk_mz_center*ones(1,N_hybrid_layers); (Nx/sk_pixels)*(sk_NUC/NUC_x)*ones(1,N_hybrid_layers);(Ny/sk_pixels)*(sk_NUC/NUC_y)*ones(1,N_hybrid_layers)];
+    skyrmion_hybrid_bot = sprintf(skyrmion_hybrid_bot_strs, skyrmion_bot_params);
+
+
+% Odd number layers
+else
+
+    % Number of hybrid layers between middle and top/bottom
+    N_hybrid_layers = (N_layers - 3) / 2;
+
+    % Define hybrid skyrmions in top region
+    hybrid_scaling_top = flip(linspace(hybrid_scale_min, hybrid_scale_max, N_hybrid_layers));
+    skyrmion_hybrid_top_strs = repmat('m.setregion(%g,blochskyrmion(%g, %g).add(%g,neelskyrmion(%g, %g)).scale(%g,%g,1))\n', 1, N_hybrid_layers);
+    skyrmion_top_params = [region_nums(1,2:(N_hybrid_layers+1)); sk_chirality*ones(1,N_hybrid_layers);sk_mz_center*ones(1,N_hybrid_layers); hybrid_scaling_top; sk_chirality*ones(1,N_hybrid_layers);sk_mz_center*ones(1,N_hybrid_layers); (Nx/sk_pixels)*(sk_NUC/NUC_x)*ones(1,N_hybrid_layers);(Ny/sk_pixels)*(sk_NUC/NUC_y)*ones(1,N_hybrid_layers)];
+    skyrmion_hybrid_top = sprintf(skyrmion_hybrid_top_strs, skyrmion_top_params);
+
+    % Define center bloch skyrmions
+    skyrmion_bloch_mid = sprintf('m.setregion(%g,blochskyrmion(%g, %g).scale(%g,%g,1))\n', region_nums(1,round(N_layers/2)), sk_chirality,sk_mz_center, (Nx/sk_pixels)*(sk_NUC/NUC_x),(Ny/sk_pixels)*(sk_NUC/NUC_y));
+
+    % Define hybrid skyrmions in bottom region
+    hybrid_scaling_bot = linspace(hybrid_scale_min, hybrid_scale_max, N_hybrid_layers);
+    skyrmion_hybrid_bot_strs = repmat('m.setregion(%g,blochskyrmion(%g, %g).add(%g,neelskyrmion(%g, %g)).scale(%g,%g,1))\n', 1, N_hybrid_layers);
+    skyrmion_bot_params = [region_nums(1,(round(N_layers/2)+1):(N_layers-1)); sk_chirality*ones(1,N_hybrid_layers);sk_mz_center*ones(1,N_hybrid_layers); hybrid_scaling_bot; -sk_chirality*ones(1,N_hybrid_layers);sk_mz_center*ones(1,N_hybrid_layers); (Nx/sk_pixels)*(sk_NUC/NUC_x)*ones(1,N_hybrid_layers);(Ny/sk_pixels)*(sk_NUC/NUC_y)*ones(1,N_hybrid_layers)];
+    skyrmion_hybrid_bot = sprintf(skyrmion_hybrid_bot_strs, skyrmion_bot_params);
+
+end
+
+% Define bottom neel skyrmion
+skyrmion_neel_bot = sprintf('m.setregion(%g,neelskyrmion(%g, %g).scale(%g,%g,1))\n', region_nums(1,end), -sk_chirality,sk_mz_center, (Nx/sk_pixels)*(sk_NUC/NUC_x),(Ny/sk_pixels)*(sk_NUC/NUC_y));
+
+% Define skyrmion stack
+skyrmions = [skyrmion_neel_top, skyrmion_hybrid_top, skyrmion_bloch_mid, skyrmion_hybrid_bot, skyrmion_neel_bot];
+
+% Format full mumax data
+mumax_input_data = sprintf(['setgridsize(%g,%g,%g)\n' ...
+                            'setcellsize(%g,%g,%g)\n' ...
+                            '\n' ...
+                            'Msat = 580e3\n' ...
+                            'Aex = 15e-12\n' ...
+                            '\n' ...
+                            '// define layers\n' ...
+                            regions ...
+                            '\n' ...
+                            '//define initial magnetization\n' ...
+                            skyrmions ...
+                            '\n' ...
+                            'saveas(m,"m_field")'], ...
+                            Nx,Ny,N_layers, ...
+                            dx,dy,dz);
+
+% Create mumax input file
+mumax_input_txt = fullfile(pwd, data_folder, 'mumax_script.txt');
+mumax_script = fopen(mumax_input_txt, 'w');
+fwrite(mumax_script, mumax_input_data);
+fclose(mumax_script);
+
+% Create m field
+[~,~] = system(sprintf('mumax3 %s', mumax_input_txt));
+mumax_output = fullfile(pwd, data_folder, 'mumax_script.out');
+
+% Read m field
+% [~,~] = system(sprintf('mumax3-convert -csv %s', fullfile(mumax_output,'m_field.ovf')));
+
+
+%% =====================================================================
+% Convert OVF -> VTS (structured grid)
+%% =====================================================================
+
+ovf_file = fullfile(mumax_output,'m_field.ovf');
+
+system(sprintf('mumax3-convert -vtk ascii %s', ovf_file));
+
+vtk_dir = 'C:\Users\Melanie\Documents\GitHub\cs410s26\final';
+
+movefile( ...
+    fullfile(mumax_output,'m_field.vts'), ...
+    vtk_dir);
+
+% MuMax will create:
+vts_file = fullfile(vtk_dir,'m_field.vts');
+
+fprintf("Generated VTS: %s\n", vts_file);
+
+%% =====================================================================
+% Read VTS XML
+%% =====================================================================
+
+doc = xmlread(vts_file);
+
+pointDataNodes = doc.getElementsByTagName('PointData');
+pointData = pointDataNodes.item(0);
+
+
+
+dataArrayList = doc.getElementsByTagName('DataArray');
+
+
+mNode = [];
+
+for i = 0:dataArrayList.getLength-1
+    node = dataArrayList.item(i);
+    if strcmp(char(node.getAttribute('Name')), 'm')
+        mNode = node;
+        break;
+    end
+end
+
+if isempty(mNode)
+    error('Could not find magnetization field m in VTS file');
+end
+
+raw = char(mNode.getTextContent);
+vals = sscanf(raw, '%f');
+
+% IMPORTANT: 3 components per point
+mx = vals(1:3:end);
+my = vals(2:3:end);
+mz = vals(3:3:end);
+
+Npoints = Nx * Ny * N_layers;
+
+% fprintf("Expected points = %d\n", Npoints);
+% fprintf("mx length       = %d\n", length(mx));
+
+if numel(mx) ~= Npoints
+    error("Mismatch: VTS has %d points but expected %d", numel(mx), Npoints);
+end
+
+if mod(numel(mx), N_layers) ~= 0
+    warning("Layer alignment may be incorrect");
+end
+
+% reshape-safe vectors
+mx = mx(:);
+my = my(:);
+mz = mz(:);
+
+m_xy = sqrt(mx.^2 + my.^2);
+m_norm = sqrt(mx.^2 + my.^2 + mz.^2 + 1e-12);
+
+den = mx.^2 + my.^2;
+helicity = zeros(size(den));
+mask = den > 1e-10;
+helicity(mask) = (mx(mask).*my(mask)) ./ den(mask);
+
+layer_id = repelem((1:N_layers)', Nx*Ny);
+
+theta_sin = my ./ sqrt(mx.^2 + my.^2 + 1e-12);
+theta_cos = mx ./ sqrt(mx.^2 + my.^2 + 1e-12);
+
+
+% theta = atan2(my, mx);   % no issue here in HSV, since it becomes circular color
+% hue = mod(theta, 2*pi) / (2*pi);
+% val = (mz + 1) / 2;   % maps [-1,1] → [0,1]
+% sat = ones(size(hue));
+% 
+% NxNyNz = Nx * Ny * N_layers;
+% 
+% hue = reshape(hue, NxNyNz, 1);
+% sat = reshape(sat, NxNyNz, 1);
+% val = reshape(val, NxNyNz, 1);
+% 
+% rgb = hsv2rgb([hue sat val]);
+
+m_mag_xy = sqrt(mx.^2 + my.^2);
+
+% in-plane angle (same idea as your m_theta)
+m_theta = atan2(my, mx);
+
+% hue (same as yours, just cleaner form)
+hue = (m_theta + pi) / (2*pi);
+
+% saturation stays full
+saturation = ones(size(hue));
+
+% brightness: use mz for white/black contrast
+% map [-1,1] → [0,1]
+brightness = (mz + 1) / 2;
+
+% optional: blend magnitude into brightness (gives nicer skyrmion visibility)
+scale = max(m_mag_xy);
+if scale < 1e-12
+    scale = 1;
+end
+brightness = 0.2 + 0.8 * brightness .* (m_mag_xy / scale);
+
+
+% convert
+rgb = hsv2rgb(cat(3, hue, saturation, brightness));
+
+
+% force col vectors
+m_xy      = m_xy(:);
+m_norm    = m_norm(:);
+helicity  = helicity(:);
+layer_id  = layer_id(:);
+theta_sin = theta_sin(:);
+theta_cos = theta_cos(:);
+
+% append
+addScalar(doc, pointData, 'helicity', helicity);
+addScalar(doc, pointData, 'm_xy', m_xy);
+addScalar(doc, pointData, 'm_norm', m_norm);
+addScalar(doc, pointData, 'layer_id', layer_id);
+addScalar(doc, pointData, 'theta_sin', theta_sin);
+addScalar(doc, pointData, 'theta_cos', theta_cos);
+addScalar(doc, pointData, 'color_r', rgb(:,1));
+addScalar(doc, pointData, 'color_g', rgb(:,2));
+addScalar(doc, pointData, 'color_b', rgb(:,3));
+
+% write final file
+out_vts = fullfile(vtk_dir,'m_field_augmented.vts');
+xmlwrite(out_vts, doc);
+
+fprintf("Wrote: %s\n", out_vts);
+
+
+% doc = xmlread(vts_file);
+% 
+% dataArrayList = doc.getElementsByTagName('DataArray');
+% 
+% 
+% mNode = [];
+% 
+% for i = 0:dataArrayList.getLength-1
+%     node = dataArrayList.item(i);
+%     if strcmp(char(node.getAttribute('Name')), 'm')
+%         mNode = node;
+%         break;
+%     end
+% end
+% 
+% raw = char(mNode.getTextContent);
+% vals = sscanf(raw, '%f');
+% 
+% N = Nx * Ny * N_layers;
+% 
+% mx = vals(1:3:end);
+% my = vals(2:3:end);
+% mz = vals(3:3:end);
+% 
+% addScalar(doc, pointData, 'helicity', helicity);
+% addScalar(doc, pointData, 'm_xy', m_xy);
+% addScalar(doc, pointData, 'm_norm', m_norm);
+% addScalar(doc, pointData, 'layer_id', layer_id);
+% addScalar(doc, pointData, 'theta_sin', theta_sin);
+% addScalar(doc, pointData, 'theta_cos', theta_cos);
+
+
+
+
+
+%% =====================================================================
+% Load VTS XML
+%% =====================================================================
+
+
+% doc = xmlread(vts_file);
+% 
+% 
+% pointDataNodes = doc.getElementsByTagName('PointData');
+% pointData = pointDataNodes.item(0);
+% 
+% %% =====================================================================
+% % Append derived scalar fields
+% %% =====================================================================
+% 
+% addScalar(doc, pointData, 'm_xy', m_xy);
+% addScalar(doc, pointData, 'm_norm', m_norm);
+% addScalar(doc, pointData, 'helicity', helicity);
+% addScalar(doc, pointData, 'layer_id', layer_id);
+% addScalar(doc, pointData, 'theta_sin', theta_sin);
+% addScalar(doc, pointData, 'theta_cos', theta_cos);
+% 
+% %% =====================================================================
+% % Save augmented VTS
+% %% =====================================================================
+% 
+% out_vts = fullfile(mumax_output,'m_field_augmented.vts');
+% 
+% xmlwrite(out_vts, doc);
+% 
+% fprintf("Wrote augmented file:\n%s\n", out_vts);
+
+
+% %% please please work-- direct vtk convert?
+% 
+% fprintf("Expected voxels = %d\n",Nx*Ny*N_layers);
+% fprintf("CSV values      = %d\n",numel(m_field));
+% 
+% vals = m_field(:);
+% 
+% Nvox = Nx*Ny*N_layers;
+% 
+% 
+% % mx = vals(1:Nvox);
+% % my = vals(Nvox+1:2*Nvox);
+% % mz = vals(2*Nvox+1:3*Nvox);
+% 
+% 
+% nx = 48;
+% ny = 48;
+% nz = 24;
+% 
+% rows_per_component = ny*nz;   % 1152
+% 
+% mx_raw = m_field(1:rows_per_component,:);
+% my_raw = m_field(rows_per_component+1:2*rows_per_component,:);
+% mz_raw = m_field(2*rows_per_component+1:end,:);
+% 
+% mx = reshape(mx_raw.',[],1);
+% my = reshape(my_raw.',[],1);
+% mz = reshape(mz_raw.',[],1);
+% 
+% %% =====================================================================
+% % Write legacy VTK file for VisIt
+% %% =====================================================================
+% 
+% vtk_dir = 'C:\Users\Melanie\Documents\GitHub\cs410s26\final';
+% 
+% vtk_file = fullfile(vtk_dir,'skyrmion_field.vtk');
+% 
+% fid = fopen(vtk_file,'w');
+% 
+% if fid == -1
+%     error('Could not open VTK file for writing.');
+% end
+% 
+% Npoints = Nx * Ny * N_layers;
+% 
+% fprintf('Writing %s\n', vtk_file);
+% 
+% % ----------------------------------------------------------------------
+% % VTK Header
+% % ----------------------------------------------------------------------
+% 
+% fprintf(fid,'# vtk DataFile Version 3.0\n');
+% fprintf(fid,'Skyrmion field data\n');
+% fprintf(fid,'ASCII\n');
+% fprintf(fid,'\n');
+% 
+% fprintf(fid,'DATASET STRUCTURED_POINTS\n');
+% 
+% fprintf(fid,'DIMENSIONS %d %d %d\n', Nx, Ny, N_layers);
+% 
+% fprintf(fid,'ORIGIN 0 0 0\n');
+% 
+% fprintf(fid,'SPACING %g %g %g\n', dx, dy, dz);
+% 
+% fprintf(fid,'\n');
+% 
+% fprintf(fid,'POINT_DATA %d\n', Npoints);
+% 
+% % ----------------------------------------------------------------------
+% % Magnetization vector
+% % ----------------------------------------------------------------------
+% 
+% fprintf(fid,'VECTORS m float\n');
+% 
+% for p = 1:Npoints
+%     fprintf(fid,'%g %g %g\n', mx(p), my(p), mz(p));
+% end
+% 
+% fprintf(fid,'\n');
+% 
+% % ----------------------------------------------------------------------
+% % Helper function for scalar fields
+% % ----------------------------------------------------------------------
+% 
+% writeScalar(fid,'m_xy',m_xy);
+% writeScalar(fid,'m_norm',m_norm);
+% writeScalar(fid,'helicity',helicity);
+% writeScalar(fid,'layer_id',layer_id);
+% writeScalar(fid,'theta_sin',theta_sin);
+% writeScalar(fid,'theta_cos',theta_cos);
+% 
+% fclose(fid);
+% 
+% fprintf('Finished writing:\n%s\n', vtk_file);
+% 
+% 
+% 
+% 
+
+
+% out = [m_field, ...
+%        m_xy, ...
+%        m_norm, ...
+%        helicity, ...
+%        layer_id, ...
+%        theta_sin, ...
+%        theta_cos];
+% 
+% vtk_dir = 'C:\Users\Melanie\Documents\GitHub\cs410s26\final';
+% 
+% writematrix(out, fullfile(vtk_dir,'m_field_extra_params.csv'));
+
+% [~,~] = system(sprintf('"C:\\mumax3\\mumax3-convert.exe" -vtk binary "%s"', fullfile(mumax_output,'m_field.ovf'))); % VisIt compatible
+
+
+% HUGE FUCKING WASTE OF TIME
+% % VISIT COLORING STUFF
+% 
+% Npoints = size(m_field,1);
+% 
+% m_xy = sqrt(mx.^2 + my.^2);
+% m_norm = sqrt(mx.^2 + my.^2 + mz.^2 + 1e-12);
+% helicity = (mx .* my) ./ (mx.^2 + my.^2 + 1e-12);
+% 
+% layer_id = repelem((1:N_layers)', Nx*Ny);
+% 
+% theta_sin = my ./ sqrt(mx.^2 + my.^2 + 1e-12);
+% theta_cos = mx ./ sqrt(mx.^2 + my.^2 + 1e-12);
+% 
+% X = X(:);
+% Y = Y(:);
+% Z = Z(:);
+% 
+% disp(">>> ENTERED VTK EXPORT BLOCK");
+% 
+% % % ---- VTS export starts here ----
+% 
+% 
+% vtk_dir = 'C:\Users\Melanie\Documents\GitHub\cs410s26\final';
+% 
+% if ~exist(vtk_dir, 'dir')
+%     mkdir(vtk_dir);
+% end
+% 
+% filename = fullfile(vtk_dir, 'skyrmion_m_field.vts');
+% 
+% fprintf("Npoints = %d\n", Npoints);
+% fprintf("X size = %d\n", numel(X));
+% fprintf("mx size = %d\n", numel(mx));
+% 
+% disp("Attempting to write:");
+% disp(filename);
+% 
+% 
+% fid = fopen(filename, 'w');
+% 
+% if fid == -1
+%     error("FAILED to open file for writing:\n%s", filename);
+% end
+% 
+% disp("PWD = ");
+% disp(pwd);
+% 
+% disp("FULL PATH = ");
+% disp(char(filename));
+% 
+% disp("FID = ");
+% disp(fid);
+% 
+% fprintf(fid, '<?xml version="1.0"?>\n');
+% fprintf(fid, '<VTKFile type="StructuredGrid" version="0.1" byte_order="LittleEndian">\n');
+% fprintf(fid, '<StructuredGrid WholeExtent="0 %d 0 %d 0 %d">\n', Nx-1, Ny-1, N_layers-1);
+% fprintf(fid, '<Piece Extent="0 %d 0 %d 0 %d">\n', Nx-1, Ny-1, N_layers-1);
+% 
+% 
+% 
+% fprintf(fid, '<Points>\n');
+% fprintf(fid, '<DataArray type="Float32" NumberOfComponents="3" format="ascii">\n');
+% 
+% for p = 1:Npoints
+%     fprintf(fid, '%g %g %g\n', X(p), Y(p), Z(p));
+% end
+% 
+% fprintf(fid, '</DataArray>\n');
+% fprintf(fid, '</Points>\n');
+% 
+% 
+% % fprintf(fid, '<Cells>\n');
+% % 
+% % % --- connectivity (each cell points to one point)
+% % fprintf(fid, '<DataArray type="Int32" Name="connectivity" format="ascii">\n');
+% % for p = 0:Npoints-1
+% %     fprintf(fid, '%d\n', p);
+% % end
+% % fprintf(fid, '</DataArray>\n');
+% % 
+% % % --- offsets
+% % fprintf(fid, '<DataArray type="Int32" Name="offsets" format="ascii">\n');
+% % for p = 1:Npoints
+% %     fprintf(fid, '%d\n', p);
+% % end
+% % fprintf(fid, '</DataArray>\n');
+% % 
+% % % --- cell types (VTK_VERTEX = 1)
+% % fprintf(fid, '<DataArray type="UInt8" Name="types" format="ascii">\n');
+% % for p = 1:Npoints
+% %     fprintf(fid, '1\n');
+% % end
+% % fprintf(fid, '</DataArray>\n');
+% % 
+% % fprintf(fid, '</Cells>\n');
+% 
+% 
+% fprintf(fid, '<PointData Vectors="m">\n');
+% 
+% % variables to be included
+% fprintf(fid, '<DataArray type="Float32" NumberOfComponents="3" Name="m" format="ascii">\n');
+% for p = 1:Npoints
+%     fprintf(fid, '%g %g %g\n', mx(p), my(p), mz(p));
+% end
+% fprintf(fid, '</DataArray>\n');
+% 
+% 
+% fprintf(fid, '<DataArray type="Float32" Name="m_xy" format="ascii">\n');
+% for p = 1:Npoints
+%     fprintf(fid, '%g\n', m_xy(p));
+% end
+% fprintf(fid, '</DataArray>\n');
+% 
+% 
+% fprintf(fid, '<DataArray type="Float32" Name="m_norm" format="ascii">\n');
+% for p = 1:Npoints
+%     fprintf(fid, '%g\n', m_norm(p));
+% end
+% fprintf(fid, '</DataArray>\n');
+% 
+% fprintf(fid, '<DataArray type="Float32" Name="helicity" format="ascii">\n');
+% for p = 1:Npoints
+%     fprintf(fid, '%g\n', helicity(p));
+% end
+% fprintf(fid, '</DataArray>\n');
+% 
+% fprintf(fid, '<DataArray type="Float32" Name="layer_id" format="ascii">\n');
+% for p = 1:Npoints
+%     fprintf(fid, '%g\n', layer_id(p));
+% end
+% fprintf(fid, '</DataArray>\n');
+% 
+% fprintf(fid, '<DataArray type="Float32" Name="theta_sin" format="ascii">\n');
+% for p = 1:Npoints
+%     fprintf(fid, '%g\n', theta_sin(p));
+% end
+% fprintf(fid, '</DataArray>\n');
+% 
+% fprintf(fid, '<DataArray type="Float32" Name="theta_cos" format="ascii">\n');
+% for p = 1:Npoints
+%     fprintf(fid, '%g\n', theta_cos(p));
+% end
+% fprintf(fid, '</DataArray>\n');
+% 
+% 
+% 
+% 
+% % fprintf(fid, '<DataArray type="Float32" Name="m_xy" format="ascii">\n');
+% % % 
+% % % assert(numel(mx) == Npoints);
+% % % assert(numel(my) == Npoints);
+% % % assert(numel(mz) == Npoints);
+% % 
+% % p = 1;
+% % for k = 1:N_layers
+% %     for j = 1:Ny
+% %         for i = 1:Nx
+% %             fprintf(fid, '%g\n', m_xy(p));
+% %             p = p + 1;
+% %         end
+% %     end
+% % end
+% % 
+% % fprintf(fid, '</DataArray>\n');
+% % 
+% % fprintf(fid, '<DataArray type="Float32" Name="m_norm" format="ascii">\n');
+% % 
+% % p = 1;
+% % for k = 1:N_layers
+% %     for j = 1:Ny
+% %         for i = 1:Nx
+% %             fprintf(fid, '%g\n', m_norm(p));
+% %             p = p + 1;
+% %         end
+% %     end
+% % end
+% % 
+% % fprintf(fid, '</DataArray>\n');
+% % 
+% % fprintf(fid, '<DataArray type="Float32" Name="helicity" format="ascii">\n');
+% % 
+% % p = 1;
+% % for k = 1:N_layers
+% %     for j = 1:Ny
+% %         for i = 1:Nx
+% %             fprintf(fid, '%g\n', helicity(p));
+% %             p = p + 1;
+% %         end
+% %     end
+% % end
+% % 
+% % fprintf(fid, '</DataArray>\n');
+% % 
+% % fprintf(fid, '<DataArray type="Float32" Name="layer_id" format="ascii">\n');
+% % 
+% % p = 1;
+% % for k = 1:N_layers
+% %     for j = 1:Ny
+% %         for i = 1:Nx
+% %             fprintf(fid, '%g\n', layer_id(p));
+% %             p = p + 1;
+% %         end
+% %     end
+% % end
+% % 
+% % fprintf(fid, '</DataArray>\n');
+% % 
+% % fprintf(fid, '<DataArray type="Float32" Name="theta_sin" format="ascii">\n');
+% % 
+% % p = 1;
+% % for k = 1:N_layers
+% %     for j = 1:Ny
+% %         for i = 1:Nx
+% %             fprintf(fid, '%g\n', theta_sin(p));
+% %             p = p + 1;
+% %         end
+% %     end
+% % end
+% % 
+% % fprintf(fid, '</DataArray>\n');
+% % 
+% % fprintf(fid, '<DataArray type="Float32" Name="theta_cos" format="ascii">\n');
+% % 
+% % p = 1;
+% % for k = 1:N_layers
+% %     for j = 1:Ny
+% %         for i = 1:Nx
+% %             fprintf(fid, '%g\n', theta_cos(p));
+% %             p = p + 1;
+% %         end
+% %     end
+% % end
+% % 
+% % fprintf(fid, '</DataArray>\n');
+% % 
+% % fprintf(fid, '<DataArray type="Float32" NumberOfComponents="3" Name="m" format="ascii">\n');
+% % 
+% % p = 1;
+% % for k = 1:N_layers
+% %     for j = 1:Ny
+% %         for i = 1:Nx
+% %             fprintf(fid, '%g %g %g\n', mx(p), my(p), mz(p));
+% %             p = p + 1;
+% %         end
+% %     end
+% % end
+% % 
+% % fprintf(fid, '</DataArray>\n');
+% % 
+% % fprintf(fid, '</PointData>\n');
+% % 
+% % fprintf(fid, '<Points>\n');
+% % fprintf(fid, '<DataArray type="Float32" NumberOfComponents="3" format="ascii">\n');
+% % 
+% % for k = 1:N_layers
+% %     for j = 1:Ny
+% %         for i = 1:Nx
+% %             fprintf(fid, '%g %g %g\n', i*dx, j*dy, k*dz);
+% %         end
+% %     end
+% % end
+% % 
+% % fprintf(fid, '</DataArray>\n');
+% % fprintf(fid, '</Points>\n');
+% 
+% fprintf(fid, '</PointData>\n');
+% fprintf(fid, '</Piece>\n');
+% fprintf(fid, '</StructuredGrid>\n');
+% fprintf(fid, '</VTKFile>\n');
+% 
+% fclose(fid);
+
+
+% stupid 3d structure version
+% % ---- VTS export (FIXED structured ordering) ----
+% 
+% filename = fullfile(pwd, data_folder, 'm_field.vts');
+% fid = fopen(filename,'w');
+% 
+% fprintf(fid, '<?xml version="1.0"?>\n');
+% fprintf(fid, '<VTKFile type="StructuredGrid" version="0.1" byte_order="LittleEndian">\n');
+% 
+% fprintf(fid, '<StructuredGrid WholeExtent="0 %d 0 %d 0 %d">\n', Nx-1, Ny-1, N_layers-1);
+% fprintf(fid, '<Piece Extent="0 %d 0 %d 0 %d">\n', Nx-1, Ny-1, N_layers-1);
+% 
+% % ---------------- Points ----------------
+% fprintf(fid, '<Points>\n');
+% fprintf(fid, '<DataArray type="Float32" NumberOfComponents="3" format="ascii">\n');
+% 
+% % IMPORTANT: structured ordering (k fastest or i fastest depending on build,
+% % but VTK expects i-j-k nested ordering consistently with Extent)
+% for k = 1:N_layers
+%     for j = 1:Ny
+%         for i = 1:Nx
+%             idx = i + (j-1)*Nx + (k-1)*Nx*Ny;
+%             fprintf(fid, '%g %g %g\n', X(idx), Y(idx), Z(idx));
+%         end
+%     end
+% end
+% 
+% fprintf(fid, '</DataArray>\n');
+% fprintf(fid, '</Points>\n');
+% 
+% % ---------------- PointData ----------------
+% fprintf(fid, '<PointData Vectors="m">\n');
+% 
+%         % % Helper reshape (CRITICAL FIX)
+%         % mx3 = reshape(mx, [Nx, Ny, N_layers]);
+%         % my3 = reshape(my, [Nx, Ny, N_layers]);
+%         % mz3 = reshape(mz, [Nx, Ny, N_layers]);
+%         % 
+%         % mxy = sqrt(mx.^2 + my.^2);
+%         % mnorm = sqrt(mx.^2 + my.^2 + mz.^2 + 1e-12);
+%         % helicity = (mx .* my) ./ (mx.^2 + my.^2 + 1e-12);
+%         % 
+%         % mxy3 = reshape(mxy, [Nx, Ny, N_layers]);
+%         % mnorm3 = reshape(mnorm, [Nx, Ny, N_layers]);
+%         % hel3 = reshape(helicity, [Nx, Ny, N_layers]);
+%         % layer3 = reshape(layer_id, [Nx, Ny, N_layers]);
+%         % t_sin3 = reshape(theta_sin, [Nx, Ny, N_layers]);
+%         % t_cos3 = reshape(theta_cos, [Nx, Ny, N_layers]);
+%         % 
+%         % % ---- write helper function inline style ----
+%         % writeScalar = @(name, data) ...
+%         %     (fprintf(fid, ['<DataArray type="Float32" Name="%s" format="ascii">\n'], name));
+%         % 
+%         % writeVector = @(name) ...
+%         %     (fprintf(fid, ['<DataArray type="Float32" NumberOfComponents="3" Name="%s" format="ascii">\n'], name));
+% 
+% % m vector field
+%     % writeVector('m');
+%     % for k = 1:N_layers
+%     %     for j = 1:Ny
+%     %         for i = 1:Nx
+%     %             fprintf(fid, '%g %g %g\n', ...
+%     %                 mx3(i,j,k), my3(i,j,k), mz3(i,j,k));
+%     %         end
+%     %     end
+%     % end
+%     % fprintf(fid, '</DataArray>\n');
+% 
+% fprintf(fid, '<DataArray type="Float32" NumberOfComponents="3" Name="m" format="ascii">\n');
+% 
+% for p = 1:Npoints
+%     fprintf(fid, '%g %g %g\n', mx(p), my(p), mz(p));
+% end
+% 
+% fprintf(fid, '</DataArray>\n');
+% 
+% % scalar fields
+% fields = { ...
+%     'm_xy', mxy3; ...
+%     'm_norm', mnorm3; ...
+%     'helicity', hel3; ...
+%     'layer_id', layer3; ...
+%     'theta_sin', t_sin3; ...
+%     'theta_cos', t_cos3 ...
+% };
+% 
+% for f = 1:size(fields,1)
+%     name = fields{f,1};
+%     data = fields{f,2};
+% 
+%     fprintf(fid, '<DataArray type="Float32" Name="%s" format="ascii">\n', name);
+% 
+%     for k = 1:N_layers
+%         for j = 1:Ny
+%             for i = 1:Nx
+%                 fprintf(fid, '%g\n', data(i,j,k));
+%             end
+%         end
+%     end
+% 
+%     fprintf(fid, '</DataArray>\n');
+% end
+% 
+% fprintf(fid, '</PointData>\n');
+% fprintf(fid, '</Piece>\n');
+% fprintf(fid, '</StructuredGrid>\n');
+% fprintf(fid, '</VTKFile>\n');
+% 
+% fclose(fid);
+
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Single Hybrid skyrmion field %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+    case 'Hybrid 2'
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Double Hybrid skyrmion field %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+sk_translation = 15e-9; % (m) move skyrmion center from origin
+
+% Define regions
+region_strs = repmat('defregion(%g,layer(%g))\n', 1, N_layers);
+region_nums = [1:N_layers; 0:(N_layers-1)];
+regions = sprintf(region_strs, region_nums);
+
+% Define hybrid scaling: [bloch + (scale * neel)]
+hybrid_scale_min = 0.01; % scaling near center (bloch)
+hybrid_scale_max = 5;   % scaling near caps (neel)
+
+% %%%%%%%%%%%%%%%%%%%% Skyrmion 1 %%%%%%%%%%%%%%%%%%%%
+% Define top neel skyrmion
+skyrmion_neel_top_1 = sprintf('m.setregion(%g,neelskyrmion(%g, %g).scale(%g,%g,1).transl(%g,0,0))\n', region_nums(1,1), sk_chirality,sk_mz_center, (Nx/sk_pixels)*(sk_NUC/NUC_x),(Ny/sk_pixels)*(sk_NUC/NUC_y), sk_translation);
+
+% Even number layers
+if rem(N_layers,2) == 0
+
+    % Number of hybrid layers between middle and top/bottom
+    N_hybrid_layers = floor((N_layers - 3) / 2);
+
+    % Define hybrid skyrmions in top region
+    % hybrid_scaling_top = flip(1:N_hybrid_layers);
+    hybrid_scaling_top_1 = flip(linspace(hybrid_scale_min, hybrid_scale_max, N_hybrid_layers).^2);
+    skyrmion_hybrid_top_strs_1 = repmat('m.setregion(%g,blochskyrmion(%g, %g).add(%g,neelskyrmion(%g, %g)).scale(%g,%g,1).transl(%g,0,0))\n', 1, N_hybrid_layers);
+    skyrmion_top_params_1 = [region_nums(1,2:(N_hybrid_layers+1)); sk_chirality*ones(1,N_hybrid_layers);sk_mz_center*ones(1,N_hybrid_layers); hybrid_scaling_top_1; sk_chirality*ones(1,N_hybrid_layers);sk_mz_center*ones(1,N_hybrid_layers); (Nx/sk_pixels)*(sk_NUC/NUC_x)*ones(1,N_hybrid_layers);(Ny/sk_pixels)*(sk_NUC/NUC_y)*ones(1,N_hybrid_layers); sk_translation*ones(1,N_hybrid_layers)];
+    skyrmion_hybrid_top_1 = sprintf(skyrmion_hybrid_top_strs_1, skyrmion_top_params_1);
+
+    % Define center bloch skyrmions
+    skyrmion_bloch_mid1_1 = sprintf('m.setregion(%g,blochskyrmion(%g, %g).scale(%g,%g,1).transl(%g,0,0))\n', region_nums(1,N_layers/2), sk_chirality,sk_mz_center, (Nx/sk_pixels)*(sk_NUC/NUC_x),(Ny/sk_pixels)*(sk_NUC/NUC_y), sk_translation);
+    skyrmion_bloch_mid2_1 = sprintf('m.setregion(%g,blochskyrmion(%g, %g).scale(%g,%g,1).transl(%g,0,0))\n', region_nums(1,(N_layers/2)+1), sk_chirality,sk_mz_center, (Nx/sk_pixels)*(sk_NUC/NUC_x),(Ny/sk_pixels)*(sk_NUC/NUC_y), sk_translation);
+    skyrmion_bloch_mid_1 = [skyrmion_bloch_mid1_1 skyrmion_bloch_mid2_1];
+
+    % Define hybrid skyrmions in bottom region
+    hybrid_scaling_bot_1 = linspace(hybrid_scale_min, hybrid_scale_max, N_hybrid_layers).^2;
+    skyrmion_hybrid_bot_strs_1 = repmat('m.setregion(%g,blochskyrmion(%g, %g).add(%g,neelskyrmion(%g, %g)).scale(%g,%g,1).transl(%g,0,0))\n', 1, N_hybrid_layers);
+    skyrmion_bot_params_1 = [region_nums(1,((N_layers/2)+2):(N_layers-1)); sk_chirality*ones(1,N_hybrid_layers);sk_mz_center*ones(1,N_hybrid_layers); hybrid_scaling_bot_1; -sk_chirality*ones(1,N_hybrid_layers);sk_mz_center*ones(1,N_hybrid_layers); (Nx/sk_pixels)*(sk_NUC/NUC_x)*ones(1,N_hybrid_layers);(Ny/sk_pixels)*(sk_NUC/NUC_y)*ones(1,N_hybrid_layers); sk_translation*ones(1,N_hybrid_layers)];
+    skyrmion_hybrid_bot_1 = sprintf(skyrmion_hybrid_bot_strs_1, skyrmion_bot_params_1);
+
+
+% Odd number layers
+else
+
+    % Number of hybrid layers between middle and top/bottom
+    N_hybrid_layers = (N_layers - 3) / 2;
+
+    % Define hybrid skyrmions in top region
+    hybrid_scaling_top_1 = flip(linspace(hybrid_scale_min, hybrid_scale_max, N_hybrid_layers).^2);
+    skyrmion_hybrid_top_strs_1 = repmat('m.setregion(%g,blochskyrmion(%g, %g).add(%g,neelskyrmion(%g, %g)).scale(%g,%g,1).transl(%g,0,0))\n', 1, N_hybrid_layers);
+    skyrmion_top_params_1 = [region_nums(1,2:(N_hybrid_layers+1)); sk_chirality*ones(1,N_hybrid_layers);sk_mz_center*ones(1,N_hybrid_layers); hybrid_scaling_top_1; sk_chirality*ones(1,N_hybrid_layers);sk_mz_center*ones(1,N_hybrid_layers); (Nx/sk_pixels)*(sk_NUC/NUC_x)*ones(1,N_hybrid_layers);(Ny/sk_pixels)*(sk_NUC/NUC_y)*ones(1,N_hybrid_layers); sk_translation*ones(1,N_hybrid_layers)];
+    skyrmion_hybrid_top_1 = sprintf(skyrmion_hybrid_top_strs_1, skyrmion_top_params_1);
+
+    % Define center bloch skyrmions
+    skyrmion_bloch_mid_1 = sprintf('m.setregion(%g,blochskyrmion(%g, %g).scale(%g,%g,1).transl(%g,0,0))\n', region_nums(1,round(N_layers/2)), sk_chirality,sk_mz_center, (Nx/sk_pixels)*(sk_NUC/NUC_x),(Ny/sk_pixels)*(sk_NUC/NUC_y), sk_translation);
+
+    % Define hybrid skyrmions in bottom region
+    hybrid_scaling_bot_1 = linspace(hybrid_scale_min, hybrid_scale_max, N_hybrid_layers).^2;
+    skyrmion_hybrid_bot_strs_1 = repmat('m.setregion(%g,blochskyrmion(%g, %g).add(%g,neelskyrmion(%g, %g)).scale(%g,%g,1).transl(%g,0,0))\n', 1, N_hybrid_layers);
+    skyrmion_bot_params_1 = [region_nums(1,(round(N_layers/2)+1):(N_layers-1)); sk_chirality*ones(1,N_hybrid_layers);sk_mz_center*ones(1,N_hybrid_layers); hybrid_scaling_bot_1; -sk_chirality*ones(1,N_hybrid_layers);sk_mz_center*ones(1,N_hybrid_layers); (Nx/sk_pixels)*(sk_NUC/NUC_x)*ones(1,N_hybrid_layers);(Ny/sk_pixels)*(sk_NUC/NUC_y)*ones(1,N_hybrid_layers); sk_translation*ones(1,N_hybrid_layers)];
+    skyrmion_hybrid_bot_1 = sprintf(skyrmion_hybrid_bot_strs_1, skyrmion_bot_params_1);
+
+end
+
+% Define bottom neel skyrmion
+skyrmion_neel_bot_1 = sprintf('m.setregion(%g,neelskyrmion(%g, %g).scale(%g,%g,1).transl(%g,0,0))\n', region_nums(1,end), -sk_chirality,sk_mz_center, (Nx/sk_pixels)*(sk_NUC/NUC_x),(Ny/sk_pixels)*(sk_NUC/NUC_y), sk_translation);
+
+% Define skyrmion stack
+skyrmions_1 = [skyrmion_neel_top_1, skyrmion_hybrid_top_1, skyrmion_bloch_mid_1, skyrmion_hybrid_bot_1, skyrmion_neel_bot_1];
+
+% Format full mumax data
+mumax_input_data_1 = sprintf(['setgridsize(%g,%g,%g)\n' ...
+                            'setcellsize(%g,%g,%g)\n' ...
+                            '\n' ...
+                            'Msat = 580e3\n' ...
+                            'Aex = 15e-12\n' ...
+                            '\n' ...
+                            '// define layers\n' ...
+                            regions ...
+                            '\n' ...
+                            '//define initial magnetization\n' ...
+                            skyrmions_1 ...
+                            '\n' ...
+                            'saveas(m,"m_field1")'], ...
+                            Nx,Ny,N_layers, ...
+                            dx,dy,dz);
+
+% Create mumax input file
+mumax_input_txt1 = fullfile(pwd, data_folder, 'mumax_script1.txt');
+mumax_script1 = fopen(mumax_input_txt1, 'w');
+fwrite(mumax_script1, mumax_input_data_1);
+fclose(mumax_script1);
+
+% Create m field
+[~,~] = system(sprintf('mumax3 %s', mumax_input_txt1));
+mumax_output1 = fullfile(pwd, data_folder, 'mumax_script1.out');
+
+% Read m field
+[~,~] = system(sprintf('mumax3-convert -csv %s', fullfile(mumax_output1,'m_field1.ovf')));
+m_field1 = load(fullfile(mumax_output1,'m_field1.csv'));
+% %%%%%%%%%%%%%%%%%%%% Skyrmion 1 %%%%%%%%%%%%%%%%%%%%
+
+% %%%%%%%%%%%%%%%%%%%% Skyrmion 2 %%%%%%%%%%%%%%%%%%%%
+% Define top neel skyrmion
+skyrmion_neel_top_2 = sprintf('m.setregion(%g,neelskyrmion(%g, %g).scale(%g,%g,1).transl(%g,0,0))\n', region_nums(1,1), sk_chirality,sk_mz_center, (Nx/sk_pixels)*(sk_NUC/NUC_x),(Ny/sk_pixels)*(sk_NUC/NUC_y), -sk_translation);
+
+% Even number layers
+if rem(N_layers,2) == 0
+
+    % Number of hybrid layers between middle and top/bottom
+    N_hybrid_layers = floor((N_layers - 3) / 2);
+
+    % Define hybrid skyrmions in top region
+    % hybrid_scaling_top = flip(1:N_hybrid_layers);
+    hybrid_scaling_top_2 = flip(linspace(hybrid_scale_min, hybrid_scale_max, N_hybrid_layers));
+    skyrmion_hybrid_top_strs_2 = repmat('m.setregion(%g,blochskyrmion(%g, %g).add(%g,neelskyrmion(%g, %g)).scale(%g,%g,1).transl(%g,0,0))\n', 1, N_hybrid_layers);
+    skyrmion_top_params_2 = [region_nums(1,2:(N_hybrid_layers+1)); -sk_chirality*ones(1,N_hybrid_layers);sk_mz_center*ones(1,N_hybrid_layers); hybrid_scaling_top_2; sk_chirality*ones(1,N_hybrid_layers);sk_mz_center*ones(1,N_hybrid_layers); (Nx/sk_pixels)*(sk_NUC/NUC_x)*ones(1,N_hybrid_layers);(Ny/sk_pixels)*(sk_NUC/NUC_y)*ones(1,N_hybrid_layers); -sk_translation*ones(1,N_hybrid_layers)];
+    skyrmion_hybrid_top_2 = sprintf(skyrmion_hybrid_top_strs_2, skyrmion_top_params_2);
+
+    % Define center bloch skyrmions
+    skyrmion_bloch_mid1_2 = sprintf('m.setregion(%g,blochskyrmion(%g, %g).scale(%g,%g,1).transl(%g,0,0))\n', region_nums(1,N_layers/2), -sk_chirality,sk_mz_center, (Nx/sk_pixels)*(sk_NUC/NUC_x),(Ny/sk_pixels)*(sk_NUC/NUC_y), -sk_translation);
+    skyrmion_bloch_mid2_2 = sprintf('m.setregion(%g,blochskyrmion(%g, %g).scale(%g,%g,1).transl(%g,0,0))\n', region_nums(1,(N_layers/2)+1), -sk_chirality,sk_mz_center, (Nx/sk_pixels)*(sk_NUC/NUC_x),(Ny/sk_pixels)*(sk_NUC/NUC_y), -sk_translation);
+    skyrmion_bloch_mid_2 = [skyrmion_bloch_mid1_2 skyrmion_bloch_mid2_2];
+
+    % Define hybrid skyrmions in bottom region
+    hybrid_scaling_bot_2 = linspace(hybrid_scale_min, hybrid_scale_max, N_hybrid_layers);
+    skyrmion_hybrid_bot_strs_2 = repmat('m.setregion(%g,blochskyrmion(%g, %g).add(%g,neelskyrmion(%g, %g)).scale(%g,%g,1).transl(%g,0,0))\n', 1, N_hybrid_layers);
+    skyrmion_bot_params_2 = [region_nums(1,((N_layers/2)+2):(N_layers-1)); -sk_chirality*ones(1,N_hybrid_layers);sk_mz_center*ones(1,N_hybrid_layers); hybrid_scaling_bot_2; -sk_chirality*ones(1,N_hybrid_layers);sk_mz_center*ones(1,N_hybrid_layers); (Nx/sk_pixels)*(sk_NUC/NUC_x)*ones(1,N_hybrid_layers);(Ny/sk_pixels)*(sk_NUC/NUC_y)*ones(1,N_hybrid_layers); -sk_translation*ones(1,N_hybrid_layers)];
+    skyrmion_hybrid_bot_2 = sprintf(skyrmion_hybrid_bot_strs_2, skyrmion_bot_params_2);
+
+
+% Odd number layers
+else
+
+    % Number of hybrid layers between middle and top/bottom
+    N_hybrid_layers = (N_layers - 3) / 2;
+
+    % Define hybrid skyrmions in top region
+    hybrid_scaling_top_2 = flip(linspace(hybrid_scale_min, hybrid_scale_max, N_hybrid_layers));
+    skyrmion_hybrid_top_strs_2 = repmat('m.setregion(%g,blochskyrmion(%g, %g).add(%g,neelskyrmion(%g, %g)).scale(%g,%g,1).transl(%g,0,0))\n', 1, N_hybrid_layers);
+    skyrmion_top_params_2 = [region_nums(1,2:(N_hybrid_layers+1)); -sk_chirality*ones(1,N_hybrid_layers);sk_mz_center*ones(1,N_hybrid_layers); hybrid_scaling_top_2; sk_chirality*ones(1,N_hybrid_layers);sk_mz_center*ones(1,N_hybrid_layers); (Nx/sk_pixels)*(sk_NUC/NUC_x)*ones(1,N_hybrid_layers);(Ny/sk_pixels)*(sk_NUC/NUC_y)*ones(1,N_hybrid_layers); -sk_translation*ones(1,N_hybrid_layers)];
+    skyrmion_hybrid_top_2 = sprintf(skyrmion_hybrid_top_strs_2, skyrmion_top_params_2);
+
+    % Define center bloch skyrmions
+    skyrmion_bloch_mid_2 = sprintf('m.setregion(%g,blochskyrmion(%g, %g).scale(%g,%g,1).transl(%g,0,0))\n', region_nums(1,round(N_layers/2)), -sk_chirality,sk_mz_center, (Nx/sk_pixels)*(sk_NUC/NUC_x),(Ny/sk_pixels)*(sk_NUC/NUC_y), -sk_translation);
+
+    % Define hybrid skyrmions in bottom region
+    hybrid_scaling_bot_2 = linspace(hybrid_scale_min, hybrid_scale_max, N_hybrid_layers);
+    skyrmion_hybrid_bot_strs_2 = repmat('m.setregion(%g,blochskyrmion(%g, %g).add(%g,neelskyrmion(%g, %g)).scale(%g,%g,1).transl(%g,0,0))\n', 1, N_hybrid_layers);
+    skyrmion_bot_params_2 = [region_nums(1,(round(N_layers/2)+1):(N_layers-1)); -sk_chirality*ones(1,N_hybrid_layers);sk_mz_center*ones(1,N_hybrid_layers); hybrid_scaling_bot_2; -sk_chirality*ones(1,N_hybrid_layers);sk_mz_center*ones(1,N_hybrid_layers); (Nx/sk_pixels)*(sk_NUC/NUC_x)*ones(1,N_hybrid_layers);(Ny/sk_pixels)*(sk_NUC/NUC_y)*ones(1,N_hybrid_layers); -sk_translation*ones(1,N_hybrid_layers)];
+    skyrmion_hybrid_bot_2 = sprintf(skyrmion_hybrid_bot_strs_2, skyrmion_bot_params_2);
+
+end
+
+% Define bottom neel skyrmion
+skyrmion_neel_bot_2 = sprintf('m.setregion(%g,neelskyrmion(%g, %g).scale(%g,%g,1).transl(%g,0,0))\n', region_nums(1,end), -sk_chirality,sk_mz_center, (Nx/sk_pixels)*(sk_NUC/NUC_x),(Ny/sk_pixels)*(sk_NUC/NUC_y), -sk_translation);
+
+% Define skyrmion stack
+skyrmions2 = [skyrmion_neel_top_2, skyrmion_hybrid_top_2, skyrmion_bloch_mid_2, skyrmion_hybrid_bot_2, skyrmion_neel_bot_2];
+
+% Format full mumax data
+mumax_input_data2 = sprintf(['setgridsize(%g,%g,%g)\n' ...
+                            'setcellsize(%g,%g,%g)\n' ...
+                            '\n' ...
+                            'Msat = 580e3\n' ...
+                            'Aex = 15e-12\n' ...
+                            '\n' ...
+                            '// define layers\n' ...
+                            regions ...
+                            '\n' ...
+                            '//define initial magnetization\n' ...
+                            skyrmions2 ...
+                            '\n' ...
+                            'saveas(m,"m_field2")'], ...
+                            Nx,Ny,N_layers, ...
+                            dx,dy,dz);
+
+% Create mumax input file
+mumax_input_txt2 = fullfile(pwd, data_folder, 'mumax_script2.txt');
+mumax_script2 = fopen(mumax_input_txt2, 'w');
+fwrite(mumax_script2, mumax_input_data2);
+fclose(mumax_script2);
+
+% Create m field
+[~,~] = system(sprintf('mumax3 %s', mumax_input_txt2));
+mumax_output_2 = fullfile(pwd, data_folder, 'mumax_script2.out');
+
+% Read m field
+[~,~] = system(sprintf('mumax3-convert -csv %s', fullfile(mumax_output_2,'m_field2.ovf')));
+m_field2 = load(fullfile(mumax_output_2,'m_field2.csv'));
+% %%%%%%%%%%%%%%%%%%%% Skyrmion 2 %%%%%%%%%%%%%%%%%%%%
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Double Hybrid skyrmion field %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+    otherwise
+        fprintf('Invalid input.\n\n');
+        return
+end
+
+return;
+
+% Read in magnetization field(s)
+if skyrmion_count == 1
+
+    % Extract m field components for each layer
+    for layer = 1:N_layers
+    
+        % Indexing for mumax csv file output
+        scale = Ny * (layer-1);
+        x_indices = (1                   + scale) : (Ny                   + scale);
+        y_indices = ((1 + Ny*N_layers)   + scale) : ((Ny + Ny*N_layers)   + scale);
+        z_indices = ((1 + Ny*N_layers*2) + scale) : ((Ny + Ny*N_layers*2) + scale);
+    
+        % Save values for each layer
+        % mx(:,:,layer) = m_field(x_indices,1:Nx);
+        % my(:,:,layer) = m_field(y_indices,1:Nx);
+        % mz(:,:,layer) = m_field(z_indices,1:Nx);
+
+        mx = m_field(:,1);
+        my = m_field(:,2);
+        mz = m_field(:,3);
+    
+    end
+
+elseif skyrmion_count == 2
+
+% Extract m field components for each layer
+    for layer = 1:N_layers
+    
+        % Indexing for mumax csv file output
+        scale = Ny * (layer-1);
+        x_indices = (1                   + scale) : (Ny                   + scale);
+        y_indices = ((1 + Ny*N_layers)   + scale) : ((Ny + Ny*N_layers)   + scale);
+        z_indices = ((1 + Ny*N_layers*2) + scale) : ((Ny + Ny*N_layers*2) + scale);
+    
+        % Save values for each layer
+        mx_1(:,:,layer) = m_field1(x_indices,1:Nx);
+        my_1(:,:,layer) = m_field1(y_indices,1:Nx);
+        mz_1(:,:,layer) = m_field1(z_indices,1:Nx);
+    
+        mx_2(:,:,layer) = m_field2(x_indices,1:Nx);
+        my_2(:,:,layer) = m_field2(y_indices,1:Nx);
+        mz_2(:,:,layer) = m_field2(z_indices,1:Nx);
+    
+    end
+    
+    % Sum contributions
+    mx = mx_1 + mx_2;
+    my = my_1 + my_2;
+    mz = mz_1 + mz_2;
+
+end
+
+
+%% DISPLAY MAGNETIZATION FIELD
+
+m_layer_sel = 1;
+mx_layer = mx(:,:,m_layer_sel);
+my_layer = my(:,:,m_layer_sel);
+
+% Calculate field magnitude and direction
+m_mag = sqrt(mx_layer.^2 + my_layer.^2);
+m_theta = atan2(my_layer, mx_layer);
+
+% Convert to HSV and then to RGB
+hue = mod(m_theta - pi, 2*pi) / (2*pi); % mod 2pi (hue flips theta? subtract pi to correct direction)
+saturation = ones(size(hue)); % Full saturation
+brightness = m_mag / max(m_mag(:)); % Use normalized magnitude for brightness
+m_field = hsv2rgb(cat(3, hue, saturation, brightness));
+
+% Display field result
+scale = 8;
+step = 9;
+offset = 0;
+[X_img,Y_img] = meshgrid(1 + offset : step : Nx + offset, 1 + offset : step : Ny + offset);
+
+% figure;
+% imshow(m_field,'InitialMagnification',1000); axis off; axis image; set(gca,'YDir','normal');
+% hold on
+% quiver(X_img, Y_img, mx_layer(1+offset:step:end+offset, 1+offset:step:end+offset) * scale, my_layer(1+offset:step:end+offset, 1+offset:step:end+offset) * scale, ...
+%         'Color', [0.9 0.9 0.9], 'LineWidth', 2, 'AutoScale', 'off','Alignment','center');
+% hold off
+% title(sprintf('m, layer %g',m_layer_sel));
+
+% return;
+
+%% MANSURIPUR ALGORITHM FOR AB PHASE SHIFT
+
+% k space vectors
+kx_axis = ifftshift((-floor(Nx / 2) : ceil(Nx / 2) - 1) * (2 * pi / (Nx * dx)));
+ky_axis = ifftshift((-floor(Ny / 2) : ceil(Ny / 2) - 1) * (2 * pi / (Ny * dy)));
+[kx, ky] = meshgrid(kx_axis, ky_axis);
+k_sq = kx.^2 + ky.^2 + eps; % add epsilon to avoid nans
+
+% S arrays
+M0 = 1;
+B0 = mu_0 * M0; % T
+phi_0 = 2.067833848e-15; % Wb
+Sx = (1i * pi * B0 ./ (phi_0 * k_sq)) .* kx;
+Sy = (1i * pi * B0 ./ (phi_0 * k_sq)) .* ky;
+
+% Calculate AB phase
+fprintf('Calculating phase shift ...\n\n');
+tic;
+
+% Initialize AB phase
+phi_AB = zeros(Nx,Ny,N_layers);
+
+% Sum over voxels
+for voxel_k = 1:N_layers
+
+    % Initialize phase in k-space
+    phi_k = zeros(size(kx),'like',1i);
+
+    for voxel_i = 1:Nx
+        for voxel_j = 1:Ny
+            
+            % Define position and magnetization vectors for voxel (i,j,k)
+            m = [mx(voxel_j, voxel_i, voxel_k), my(voxel_j,voxel_i, voxel_k), mz(voxel_j,voxel_i, voxel_k)];
+            r = [x(voxel_i), y(voxel_j), z(voxel_k)];
+            
+            % Calculate voxel phase for theta tilt
+            X_theta = exp(1i * (kx * r(1) + ky * (r(2) * cosd(theta) - r(3) * sind(theta)))) .* ...
+                        (m(1) * Sy - (m(2) * cosd(theta) - m(3) * sind(theta)) * Sx);
+            
+            % Calculate voxel phase for gamma tilt
+            Y_gamma = exp(1i * (kx * (r(1) * cosd(gamma) + r(3) * sind(gamma)) + ky * r(2))) .* ...
+                    ((m(1) * cosd(gamma) - m(3) * sind(gamma)) * Sy - m(2) * Sx);
+            
+            % Sum over voxels
+            phi_k = phi_k + X_theta; %+ Y_gamma; %%%%%%%%%%%%%% fix multi-tilt contributions
+            
+        end
+    end
+    
+    % Inverse FT to get real-space phase shift
+    phi_AB(:,:,voxel_k) = real(ifftshift(ifft2(phi_k)));
+
+end
+
+% Scale down phase shift based on COM defletion magnitudes (aim for ~20 urad - from experimental values)
+phi_AB_scaling = (N_layers/2) * max(abs(phi_AB(:))); % adjusting scaling has nearly linear effect on COM deflection magnitudes
+phi_AB = phi_AB / phi_AB_scaling;
+
+% Display chosen layer
+phi_AB_layer_sel = 1;
+% figure; imagesc(phi_AB(:,:,phi_AB_layer_sel)); axis image; title(sprintf('$\\phi_{AB}$ layer %g',phi_AB_layer_sel),'Interpreter','latex'); colormap  gray; colorbar; set(gca,'YDir','normal');
+
+% Mansuripur algorithm run time
+T1 = toc;
+if T1 >= 3600
+    t1_hour = floor(T1/3600);
+    t1_min = floor(rem(T1,3600)/60);
+    t1_sec = rem(rem(T1,3600),60);
+    fprintf('Phase shift calculated in %d hr %d min %0.2f sec.\n\n',t1_hour,t1_min,t1_sec);
+else
+    t1_min = floor(T1/60);
+    t1_sec = rem(T1,60);
+    fprintf('Phase shift calculated in %d min %0.2f sec.\n\n',t1_min,t1_sec);
+end
+
+
+%% SAVE AB PHASE TIF
+
+if save_AB_phase_tif
+
+% convert to single
+phi_AB_single = single(phi_AB);
+
+% Write phase tif
+t = Tiff(fullfile(data_folder,'AB_phase.tif'), 'w');
+for tif_layer_idx = 1:N_layers
+    
+    % Set tag properties for each layer
+    t.setTag('ImageLength', size(phi_AB_single, 1)); % Height
+    t.setTag('ImageWidth', size(phi_AB_single, 2));  % Width
+    t.setTag('Photometric', Tiff.Photometric.MinIsBlack);
+    
+    % Set bits per sample and sample format based on data type
+    t.setTag('BitsPerSample', 32);
+    t.setTag('SampleFormat', Tiff.SampleFormat.IEEEFP);
+    
+    % Set SamplesPerPixel after BitsPerSample
+    t.setTag('SamplesPerPixel', 1);
+    
+    % Compression and PlanarConfiguration
+    t.setTag('Compression', Tiff.Compression.None);
+    t.setTag('PlanarConfiguration', Tiff.PlanarConfiguration.Chunky);
+    
+    % Write the data
+    t.write(phi_AB_single(:,:,tif_layer_idx));
+    
+    % Close and reopen in append mode for the next layer
+    if tif_layer_idx < N_layers
+        t.writeDirectory();
+    end
+    
+end
+t.close();
+
+end
+
+
+%% GENERATE VACUUM UNIT CELL FOR PROPAGATION WITH ATOMPOT AND MULSLICE
+
+% % adjust for small probe simulation
+% NUC_x = NUC_x2;
+% NUC_y = NUC_y2;
+% ax = ax2;
+% by = by2;
+
+% Format atompot.dat file %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% fix digits with delta z
+atompot_dat_data = sprintf(['  %.2f %.2f %.4f\n',' 0\n', ' 1\n','  1.0000 0.5000 0.5000\n\n'], ax, by, delta_z);
+
+% Create atompot.dat file
+atompot_dat = fullfile(pwd, data_folder, 'atompot.dat');
+write_atompot_dat = fopen(atompot_dat, 'w');
+fwrite(write_atompot_dat, atompot_dat_data);
+fclose(write_atompot_dat);
+
+% Create atompot input/output text files and atompot output tif file
+atompot_output_txt = fullfile(data_folder, 'atompot_output.txt');
+atompot_input_txt = fullfile(data_folder, 'atompot_input.txt');
+atompot_tif = fullfile(data_folder, 'atompot.tif');
+
+% Format atompot data
+atompot_input_data = sprintf(['%s\n','%s\n','%g %g\n','1 1 1\n','n'], ...
+                atompot_dat, atompot_tif, Nx, Ny);
+
+% Create atompot input file
+atompot_input = fopen(atompot_input_txt, 'w');
+fwrite(atompot_input, atompot_input_data);
+fclose(atompot_input);
+
+% Create placeholder potential file
+system(sprintf('%s < %s >> %s', atompot_exe, atompot_input_txt, atompot_output_txt));
+
+% Cleanup temporary files
+delete(atompot_output_txt);
+delete(atompot_input_txt);
+
+% Store atompot tif output info
+tif_info = imfinfo(atompot_tif); % Get metadata about the image layers
+num_tif_layers = numel(tif_info); % Number of layers
+
+% Rewrite first 2 layers with vacuum (0's) (layer 1: 8-bit image, layer 2: 32-bit image, layer 3: metadata)
+atompot_tif_layers = cell(1, num_tif_layers);
+for ii = 1:num_tif_layers
+    atompot_tif_layers{ii} = imread(atompot_tif, ii);
+    switch ii
+        case 1
+            atompot_tif_layers{ii} = uint8(zeros(Ny,Nx));
+        case 2
+            atompot_tif_layers{ii} = single(zeros(Ny,Nx));
+    end
+end
+
+% Write vacuum potential to tif
+vac_tif = fullfile(data_folder, 'vac.tif');
+t = Tiff(vac_tif, 'w');
+for tif_layer_idx = 1:num_tif_layers
+    
+    % Set tag properties for each layer
+    t.setTag('ImageLength', size(atompot_tif_layers{tif_layer_idx}, 1));
+    t.setTag('ImageWidth', size(atompot_tif_layers{tif_layer_idx}, 2));
+    t.setTag('Photometric', Tiff.Photometric.MinIsBlack);
+    
+    % Set bits per sample and sample format based on data type
+    if isa(atompot_tif_layers{tif_layer_idx}, 'uint8')
+        t.setTag('BitsPerSample', 8);
+        t.setTag('SampleFormat', Tiff.SampleFormat.UInt);
+    elseif isa(atompot_tif_layers{tif_layer_idx}, 'single')
+        t.setTag('BitsPerSample', 32);
+        t.setTag('SampleFormat', Tiff.SampleFormat.IEEEFP);
+    end
+    
+    % Set SamplesPerPixel after BitsPerSample
+    t.setTag('SamplesPerPixel', 1);
+    
+    % Compression and PlanarConfiguration
+    t.setTag('Compression', Tiff.Compression.None);
+    t.setTag('PlanarConfiguration', Tiff.PlanarConfiguration.Chunky);
+    
+    % Write the data
+    t.write(atompot_tif_layers{tif_layer_idx});
+    
+    % Close and reopen in append mode for the next layer
+    if tif_layer_idx < num_tif_layers
+        t.writeDirectory();
+    end
+    
+end
+t.close();
+
+
+
+
+%% GENERATE 4D DATASET
+
+% Run multislice simulation
+fprintf('Running simulation ...\n\n');
+
+tic;
+parfor i = 1:N_scan_position    % y
+    for j = 1:N_scan_position   % x
+        %% INITIALIZE FILES AND DIRECTORIES
+        
+        % Define current probe position
+        probe_position_x = probe_pos_X(i, j);
+        probe_position_y = probe_pos_Y(i, j);
+        
+        % Unique temp directory for each worker to avoid file conflicts
+        tempDir = fullfile(tempdir, sprintf('worker_%d_%d', i, j));
+        if ~exist(tempDir, 'dir')
+            mkdir(tempDir);
+        end
+        
+        % Create probe input/output text files and probe tif file
+        probe_output_txt = fullfile(tempDir, 'probe_output.txt');
+        probe_input_txt = fullfile(tempDir, 'probe_input.txt');
+        if save_probe_tif
+            probe_tif = fullfile(pwd, data_folder, sprintf('probe_px%d_py%d.tif', j, i));
+        else
+            probe_tif = fullfile(tempDir, sprintf('probe_px%d_py%d.tif', j, i));
+        end
+        
+        
+        %% CREATE INITIAL PROBE
+
+        % Format probe data
+        probe_input_data = sprintf(['%g\n','%s\n','%g %g\n','%g %g\n','%g %g %g %g %g\n','%g\n', ...
+                        '%g %g\n','%s'], ...
+                        probe_type, probe_tif, Nx,Ny, ax,by, voltage,c3,c5,df,alpha, smooth_apert, ...
+                        probe_position_x,probe_position_y, HO_aber);
+
+        % Create probe input file
+        probe_input = fopen(probe_input_txt, 'w');
+        fwrite(probe_input, probe_input_data);
+        fclose(probe_input);
+
+        % Create probe
+        system(sprintf('%s < %s >> %s', probe_exe, probe_input_txt, probe_output_txt));
+
+        % Cleanup temporary files
+        delete(probe_output_txt);
+        delete(probe_input_txt);
+
+
+        %% READ PROBE WAVEFUNCTION
+        
+        % Store probe tif output info
+        tif_info = imfinfo(probe_tif); % get metadata about the image layers
+        num_tif_layers = numel(tif_info); % number of layers
+        
+        % Store all tif layers (layer 1: 8-bit image, layer 2: 32-bit image, layer 3: metadata)
+        tif_layers = cell(1, num_tif_layers);
+        for ii = 1:num_tif_layers
+            tif_layers{ii} = imread(probe_tif, ii);
+        end
+        
+        % Convert 32-bit output to double for calculations
+        wavefcn = double(tif_layers{2});
+        
+        for k = 1:N_layers
+            %% LOAD EXIT WAVEFUNCTION COMPONENTS
+
+            % Read in real/imag parts of wavefunction
+            wavefcn_real = wavefcn(1:Ny,1:Nx);
+            wavefcn_imag = wavefcn(1:Ny,Nx+1:end);
+            wavefcn_complex = wavefcn_real + 1i * wavefcn_imag;
+            % figure; imagesc(wavefcn_real); axis image; colorbar; title('Re(probe)'); set(gca,'YDir','normal');
+            % figure; imagesc(wavefcn_imag); axis image; colorbar; title('Im(probe)'); set(gca,'YDir','normal');
+    
+            % Define amplitude and phase from complex wavefunction
+            A = abs(wavefcn_complex);
+            phi = angle(wavefcn_complex);
+            % figure; imagesc(A); axis image; colorbar; title('A'); set(gca,'YDir','normal');
+            % figure; imagesc(phi); axis image; colorbar; title('\phi'); set(gca,'YDir','normal');
+
+
+            %% AHARONOV-BOHM PHASE SHIFT
+
+            phi_total = phi + phi_AB(:,:,k);
+            % figure; imagesc(phi_total); axis image; title('\phi_{total}'); colorbar; colormap hsv; set(gca,'YDir','normal');
+
+
+            %% UPDATE WAVEFUNCTION
+            
+            % Update complex wavefunction with total phase
+            wavefcn_complex_updated = A .* exp(1i * phi_total);
+
+            % Extract real/imag parts of complex wavefunction
+            wavefcn_real_updated = real(wavefcn_complex_updated);
+            wavefcn_imag_updated = imag(wavefcn_complex_updated);
+            % figure; imagesc(wavefcn_real_updated); axis image; colorbar; title('real'); set(gca,'YDir','normal');
+            % figure; imagesc(wavefcn_imag_updated); axis image; colorbar; title('imag'); set(gca,'YDir','normal');
+
+            % Store wavefunction components
+            wavefcn(1:Ny,1:Nx) = wavefcn_real_updated;
+            wavefcn(1:Ny,Nx+1:end) = wavefcn_imag_updated;
+            
+
+            %% CREATE EXIT WAVEFUNCTION TIF
+
+            % Write the modified image
+            if save_wavefcn_tif
+                wavefcn_tif = fullfile(pwd, data_folder, sprintf('wavefcn_px%d_py%d.tif', j, i));
+            else
+                wavefcn_tif = fullfile(tempDir, sprintf('wavefcn_px%d_py%d.tif', j, i));
+            end
+            
+            % Update 8-bit tif layer
+            tif_layers{1}(1:Ny,1:Nx) = uint8(255 * (wavefcn_real_updated - min(wavefcn_real_updated(:))) / (max(wavefcn_real_updated(:)) - min(wavefcn_real_updated(:))));
+            tif_layers{1}(1:Ny,Nx+1:end) = uint8(255 * (wavefcn_imag_updated - min(wavefcn_imag_updated(:))) / (max(wavefcn_imag_updated(:)) - min(wavefcn_imag_updated(:))));
+            
+            % Update 32-bit layer
+            tif_layers{2} = single(wavefcn);
+    
+            % Write wavefunction tif
+            t = Tiff(wavefcn_tif, 'w');
+            for tif_layer_idx = 1:num_tif_layers
+                
+                % Set tag properties for each layer
+                t.setTag('ImageLength', size(tif_layers{tif_layer_idx}, 1));
+                t.setTag('ImageWidth', size(tif_layers{tif_layer_idx}, 2));
+                t.setTag('Photometric', Tiff.Photometric.MinIsBlack);
+                
+                % Set bits per sample and sample format based on data type
+                if isa(tif_layers{tif_layer_idx}, 'uint8')
+                    t.setTag('BitsPerSample', 8);
+                    t.setTag('SampleFormat', Tiff.SampleFormat.UInt);
+                elseif isa(tif_layers{tif_layer_idx}, 'single')
+                    t.setTag('BitsPerSample', 32);
+                    t.setTag('SampleFormat', Tiff.SampleFormat.IEEEFP);
+                end
+                
+                % Set SamplesPerPixel after BitsPerSample
+                t.setTag('SamplesPerPixel', 1);
+                
+                % Compression and PlanarConfiguration
+                t.setTag('Compression', Tiff.Compression.None);
+                t.setTag('PlanarConfiguration', Tiff.PlanarConfiguration.Chunky);
+                
+                % Write the data
+                t.write(tif_layers{tif_layer_idx});
+                
+                % Close and reopen in append mode for the next layer
+                if tif_layer_idx < num_tif_layers
+                    t.writeDirectory();
+                end
+                
+            end
+            t.close();
+
+
+            %% PROPAGATE EXIT WAVEFUNCTION WITH MULSLICE
+
+            % Create mulslice input/output text files and mulslice output tif file
+            mulslice_output_txt = fullfile(tempDir, 'mulslice_output.txt');
+            mulslice_input_txt = fullfile(tempDir, 'mulslice_input.txt');
+            if save_wavefcn_tif
+                wavefcn_prop_tif = fullfile(pwd, data_folder, sprintf('wavefcn_prop_px%d_py%d.tif', j, i));
+            else
+                wavefcn_prop_tif = fullfile(tempDir, sprintf('wavefcn_prop_px%d_py%d.tif', j, i));
+            end
+            
+            % Format mulslice data
+            mulslice_input_data = sprintf(['1(a)\n','%s\n','%s\n','n\n','y\n','%s\n','0 0\n','0 0\n','n'], ...
+                            vac_tif, wavefcn_prop_tif, wavefcn_tif);
+            
+            % Create mulslice input file
+            mulslice_input = fopen(mulslice_input_txt, 'w');
+            fwrite(mulslice_input, mulslice_input_data);
+            fclose(mulslice_input);
+        
+            % Propagate wavefunction
+            system(sprintf('%s < %s >> %s', mulslice_exe, mulslice_input_txt, mulslice_output_txt));
+        
+            % Cleanup temporary files
+            delete(mulslice_output_txt);
+            delete(mulslice_input_txt);
+            if ~save_wavefcn_tif
+                delete(wavefcn_tif);
+            end
+
+            %% READ IN PROPAGATED WAVEFUNCTION FOR NEXT LAYER
+            
+            % Store mulslice tif output info
+            tif_info = imfinfo(wavefcn_prop_tif); % Get metadata about the image layers
+            num_tif_layers = numel(tif_info); % Number of layers
+            
+            % Store all tif layers (layer 1: 8-bit image, layer 2: 32-bit image, layer 3: metadata)
+            tif_layers = cell(1, num_tif_layers);
+            for ii = 1:num_tif_layers
+                tif_layers{ii} = imread(wavefcn_prop_tif, ii);
+            end
+            
+            % Convert 32-bit output to double for calculations
+            wavefcn = double(tif_layers{2});
+
+            % Cleanup temporary files
+            if ~save_wavefcn_tif && k < N_layers
+                delete(wavefcn_prop_tif);
+            end
+            
+
+        end
+        
+        % Delete probe tif
+        if ~save_probe_tif
+            delete(probe_tif);
+        end
+
+
+        %% CREATE CBED
+        
+        % Create image input/output text files and cbed tif file
+        image_output_txt = fullfile(tempDir, 'image_output.txt');
+        image_input_txt = fullfile(tempDir, 'image_input.txt');
+        if save_cbed_tif
+            cbed_tif = fullfile(pwd, data_folder, sprintf('cbed_px%d_py%d.tif', j, i));
+        else
+            cbed_tif = fullfile(tempDir, sprintf('cbed_px%d_py%d.tif', j, i));
+        end
+        
+        % Format image data
+        image_input_data = sprintf(['%s\n','2\n','%s\n','y\n','n\n','0'], ...
+                        wavefcn_prop_tif, cbed_tif);
+        
+        % Create image input file
+        image_input = fopen(image_input_txt, 'w');
+        fwrite(image_input, image_input_data);
+        fclose(image_input);
+        
+        % Create cbed by running image
+        system(sprintf('%s < %s >> %s', image_exe, image_input_txt, image_output_txt));
+        
+        % Read in cbed
+        cbed = imread(cbed_tif,2);
+        % figure; imagesc(cbed); axis image; title('CBED'); colorbar; set(gca,'YDir','normal');
+        % saveas(gcf, fullfile(pwd, data_folder,sprintf('cbed_alpha%g_NUC%g_layers%g.jpg',alpha,NUC_x,N_layers)));
+        % figure; imagesc(log(abs(cbed))); axis image; title('log|CBED|'); colorbar; set(gca,'YDir','normal');
+        % saveas(gcf, fullfile(pwd, data_folder,sprintf('cbed_log_alpha%g_NUC%g_layers%g.jpg',alpha,NUC_x,N_layers)));
+
+        % Cleanup temporary files
+        delete(image_output_txt);
+        delete(image_input_txt);
+
+        % Delete exit wavefcn tif
+        if ~save_wavefcn_tif
+            delete(wavefcn_prop_tif);
+        end
+
+        % Delete cbed tif
+        if ~save_cbed_tif
+            delete(cbed_tif);
+        end
+
+
+        %% STORE DATA AND WIPE TEMPORARY DIRECTORY
+        
+        % Save results in 4D data array (kx, ky, x, y)
+        data(:,:,j,i) = cbed;
+
+        % Optionally save exit wavefunction data in 4D array
+        if save_wavefcn_4d
+            data_wavefcn(:,:,j,i) = wavefcn;
+        end
+
+        % Clear temporary directory
+        rmdir(tempDir, 's');
+        
+        
+    end
+end
+
+
+%% SIMULATION RUN TIME
+
+T2 = toc;
+if T2 >= 3600
+    t2_hour = floor(T2/3600);
+    t2_min = floor(rem(T2,3600)/60);
+    t2_sec = rem(rem(T2,3600),60);
+    fprintf('Simulation completed in %d hr %d min %0.2f sec.\n\n',t2_hour,t2_min,t2_sec);
+else
+    t2_min = floor(T2/60);
+    t2_sec = rem(T2,60);
+    fprintf('Simulation completed in %d min %0.2f sec.\n\n',t2_min,t2_sec);
+end
+
+
+%% SAVE DATA
+
+fprintf('Saving data ...\n\n');
+
+% % Reshape data for multislice ptychography
+% dp = reshape(data, [Nx, Ny, N_scan_position^2]);
+
+% Save 4D-STEM dataset with selected metadata
+save(fullfile(data_folder, data_filename), 'data', metadata{:}, '-v7.3'); % v7.3 .mat files use hdf5 based format
+fprintf('Saved ''%s'' to data directory.\n\n',data_filename);
+
+% Optionally save 4D wavefunction data
+if save_wavefcn_4d
+    save(fullfile(data_folder, data_wavefcn_filename), 'data_wavefcn', '-v7.3'); % v7.3 .mat files use hdf5 based format
+    fprintf('Saved ''%s'' to data directory.\n\n',data_wavefcn_filename);
+end
+
+
+%% CLOSE PARALLEL PROCESS POOL
+delete(gcp('nocreate'));
+
+
+function addScalar(doc, pointData, name, data)
+
+    import org.w3c.dom.*
+
+    node = doc.createElement('DataArray');
+    node.setAttribute('type','Float32');
+    node.setAttribute('Name', name);
+    node.setAttribute('NumberOfComponents','1');
+    node.setAttribute('format','ascii');
+
+    % IMPORTANT: flatten column-wise
+    data = data(:);
+
+    txt = sprintf('%.8e ', data);
+    textNode = doc.createTextNode(txt);
+
+    node.appendChild(textNode);
+    pointData.appendChild(node);
+
+end
+
+
+% % local function (for vtk conv)
+% function writeScalar(fid,name,data)
+% 
+% fprintf(fid,'SCALARS %s float 1\n',name);
+% fprintf(fid,'LOOKUP_TABLE default\n');
+% 
+% for p = 1:numel(data)
+%     fprintf(fid,'%g\n',data(p));
+% end
+% 
+% fprintf(fid,'\n');
+% 
+% end
+
