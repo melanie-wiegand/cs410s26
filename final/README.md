@@ -1,4 +1,5 @@
-# Final project desription for CS410 Science Visualization, Spring 2026 with Hank Childs
+# Final Project Submission
+## CS410 Science Visualization, Spring 2026 with Hank Childs
 ## Created by Melanie Wiegand
 ## 06/10/2026
 
@@ -6,8 +7,8 @@
 ### OVERVIEW
 For this project, I wanted to take the 3D models that I use for my physics research lab and convert them into something that would work in the VisIt software.
 
-In my research, I model the process of probing magnetic materials with electron probes, effectively simulating a scanning transmission electron microscope.
-To do this, I use MATLAB code along with the MuMax3 software to create 3D models of magnetic skyrmions (whirlpool-like nanoscale magnetic fields in ferromagnets)
+In my research, I model the process of imaging magnetic materials with electron probes, effectively simulating a scanning transmission electron microscope.
+To do this, I use MATLAB code along with the MuMax3 software to create 3D models of magnetic skyrmions (nanoscale, whirlpool-like magnetic fields in ferromagnets)
 
 
 ### WHAT I AM SCIENTIFICALLY VISUALIZING
@@ -65,13 +66,20 @@ Here's what the vis software I'm used to looks like:
 
 - file conversion is not for the faint of heart
 - I probably should have started earlier or gave up sooner or something
-- While it may be a poor choice for magnetic fields specifically, VisIt does have a lot more functionality for broad visualization than MuMax (basically everything except directional coloring)
+- It may be a poor choice for magnetic fields specifically, but VisIt does have a lot more functionality for broad visualization than MuMax (basically everything except directional coloring)
 - I wish the UI was a little more customizable; if there's a way to make the plots window bigger, I did not find it
+
+I'm very happy with my results though; here's a MuMax plan view vs. one from my VisIt program:
+
+![Mumax top down](mumax_top_down.png)
+
+![VisIt top down](visit_top_down.png)
 
 
 ## SUBMISSION MATERIALS
 
 * README.md
 * final_movie_skyrmion.mp4 - my final video
-* 
+* m_field_augmented_hsv.vts - the dataset that finally worked for getting directional color
+* various pngs of what I was trying to emulate & what I ended up with
  
